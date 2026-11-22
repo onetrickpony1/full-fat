@@ -18,6 +18,7 @@ def env(tmp_path, monkeypatch, fake_github):
     conf.write_text(REAL)
     monkeypatch.setattr(jasp, "running", lambda: False)
     monkeypatch.setattr(cli.jasp, "running", lambda: False)
+    monkeypatch.setattr(cli.apps, "find", lambda app: None)  # never touch a real Claude Code or Codex
     return tmp_path, conf
 
 
@@ -79,11 +80,11 @@ def test_rerun_and_careful_is_remembered(env):
     (tmp_path / "ws" / "mine.txt").write_text("x")
     cli.main(setup_args(tmp_path, conf))
     s = json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())
-    assert "mcp__jasp" not in s["permissions"]["allow"]  # still careful
+    assert "mcp__jasp__jasp_analysis_run" not in s["permissions"]["allow"]  # still careful
     assert (tmp_path / "ws" / "mine.txt").read_text() == "x"
     cli.main(setup_args(tmp_path, conf, "--no-careful"))
     s = json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())
-    assert "mcp__jasp" in s["permissions"]["allow"]
+    assert "mcp__jasp__jasp_analysis_run" in s["permissions"]["allow"]
 
 
 def test_uninstall_restores(env, monkeypatch):
@@ -157,3 +158,23 @@ def test_default_command_is_setup(env, monkeypatch):
     monkeypatch.setattr(cli, "cmd_setup", lambda a, ui: seen.setdefault("cmd", a.cmd) and 0)
     cli.main(["--yes", "--no-launcher"])
     assert seen["cmd"] == "setup"
+
+
+def test_setup_fails_when_connector_fails(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    from full_fat import connector
+    monkeypatch.setattr(connector, "warm", lambda server, cwd, timeout=300: (False, "git is not installed"))
+    assert cli.main(setup_args(tmp_path, conf)) == 1
+    out = capsys.readouterr().out
+    assert "could not be prepared" in out and "git is not installed" in out and "Almost done" in out
+
+
+def test_plan_choice(env):
+    tmp_path, conf = env
+    cli.main(setup_args(tmp_path, conf, "--plan", "max"))
+    s = json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())
+    assert s["model"] == "opus" and state.load()["claude_plan"] == "max"
+    cli.main(setup_args(tmp_path, conf))  # remembered with --yes
+    assert json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())["model"] == "opus"
+    cli.main(setup_args(tmp_path, conf, "--plan", "pro"))
+    assert "model" not in json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())

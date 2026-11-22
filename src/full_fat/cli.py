@@ -11,7 +11,7 @@ import time
 import urllib.error
 from pathlib import Path
 
-from . import __version__, apps, jasp, launcher, prompts, state, workspace
+from . import __version__, apps, connector, jasp, launcher, prompts, state, workspace
 from .ui import UI, waiting
 
 GITHUB = "https://github.com/onetrickpony1/full-fat"
@@ -137,8 +137,6 @@ def sign_in(app: apps.App, exe: str, ui: UI) -> bool:
     account = "Claude" if app.key == "claude" else "ChatGPT"
     ui.say(f"Now sign in with your {account} account (the one with your paid plan).")
     ui.say("  A browser window opens. Sign in there, allow access, then come back to this window.")
-    if app.key == "claude":
-        ui.say("  If it asks how to sign in, choose your Claude subscription (not the API / Console).")
     ui.enter("Press Enter to open the sign-in page.")
     done = apps.sign_in(app, exe)
     if done:
@@ -146,6 +144,37 @@ def sign_in(app: apps.App, exe: str, ui: UI) -> bool:
     else:
         ui.problem(f"Not signed in to {app.product} yet. You can do it later: Talk to JASP asks again.")
     return done
+
+
+def claude_plan(a, st: dict, exe: str | None, ui: UI) -> str:
+    """'max' (Opus by default) or 'pro' (Claude Code's own default model)."""
+    if a.plan:
+        return a.plan
+    found = apps.claude_plan(exe) if exe else None
+    if found:
+        ui.ok(f"Claude {found.title()} plan: the chat starts on "
+              + ("Opus" if found == "max" else "Claude Code's usual model") + " at high effort.")
+        return found
+    if ui.yes:
+        return st.get("claude_plan") or "pro"
+    n = ui.choose("Which Claude plan do you have?", ["Pro", "Max"], 2 if st.get("claude_plan") == "max" else 1)
+    return ["pro", "max"][n - 1]
+
+
+def warm_connector(folder: Path, ui: UI) -> bool:
+    import json  # noqa: PLC0415
+    try:
+        server = json.loads((folder / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["jasp"]
+    except (OSError, ValueError, KeyError):
+        return False
+    ui.say("  Getting the link between the chat and JASP ready (the first time this takes a minute)...")
+    ok, detail = connector.warm(server, folder)
+    if ok:
+        ui.ok("The chat can reach JASP's tools.")
+    else:
+        ui.problem("The part that lets the chat use JASP could not be prepared.")
+        ui.say("  Check the internet connection, then run Full Fat again." + (f" (Details: {detail})" if detail else ""))
+    return ok
 
 
 def pick_persona(wanted: str | None, p: prompts.Prompts, ui: UI) -> str:
@@ -192,18 +221,22 @@ def cmd_setup(a, ui: UI) -> int:
         ui.say("  Check the internet connection and run Full Fat again.")
         return 1
     persona = pick_persona(a.persona or st.get("persona"), p, ui)
+    plan = claude_plan(a, st, exes.get("claude"), ui) if "claude" in keys else st.get("claude_plan")
     host, port = j.host_port()
-    res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs)
+    res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs,
+                          claude_model="opus" if plan == "max" else None)
     ui.ok(f"Chat folder ready: {folder} (JASP instructions from {p.ref}, persona {persona}"
           f"{', careful mode' if careful else ''}).")
     for n in p.notes:
         ui.say("  " + n)
     for old in res.kept_old:
         ui.say(f"  You had changed a file Full Fat updates, so your copy is kept as {old}")
+    connector_ok = warm_connector(folder, ui)
 
     if "codex" in keys and not a.no_trust:
         r = apps.trust_codex_folder(folder)
         if r == "added":
+            state.save({"codex_trust_added": str(folder)})
             ui.ok("Codex trusts the chat folder, so it uses the folder's settings.")
         elif r == "already":
             ui.ok("Codex already trusts the chat folder.")
@@ -217,28 +250,45 @@ def cmd_setup(a, ui: UI) -> int:
         try:
             launchers = [str(x) for x in launcher.create(folder)]
         except OSError:
-            launchers = [str(x) for x in launcher.create(folder, desktop=Path.home())]
-            ui.say("  Full Fat could not put the icon on the Desktop, so it is in your home folder.")
+            try:
+                launchers = [str(x) for x in launcher.create(folder, desktop=Path.home())]
+                ui.say(f"  Full Fat could not put the icon on the Desktop, so it is in your home folder: "
+                       f"{launchers[0] if launchers else Path.home()}")
+            except OSError as e:
+                ui.problem(f"Full Fat could not make the Talk to JASP icon ({e}). Use: full-fat launch")
         for x in launchers:
             ui.ok(f'"{launcher.NAME}" icon: {x}')
 
     old_launchers = [x for x in st.get("launchers", []) if x not in launchers]
-    state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful,
+    state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful, "claude_plan": plan,
                 "launchers": launchers + old_launchers, "settings_file": a.settings_file,
                 "jasp_version": j.version})
 
-    ui.heading("Done")
-    if "claude" in keys:
-        ui.say("The first time, Claude asks whether you trust the chat folder. Press Enter to say yes.")
+    ui.heading("Done" if connector_ok else "Almost done")
     ui.say("To chat about your JASP work:")
     ui.say("  1. Open JASP." + ("" if switched else " (Its connection for AI apps is still off: "
                                  "Talk to JASP offers to fix that.)"))
     ui.say(f'  2. Double-click "{launcher.NAME}" on your Desktop.' if launchers else
-           f"  2. Run: full-fat launch")
+           "  2. Run: full-fat launch")
+    first_run_notes(keys, ui)
+    if not connector_ok:
+        return 1
     if not ui.yes and not a.no_start and exes and ui.yes_no("Start a chat now?", True):
         a.app = keys[0] if len(keys) == 1 else None
         return cmd_launch(a, ui)
     return 0
+
+
+def first_run_notes(keys: list[str], ui: UI) -> None:
+    ui.say("The first time you start a chat:")
+    if "claude" in keys:
+        ui.say("  - Claude shows a few welcome screens (for example a choice of colours). Press Enter on each.")
+        ui.say("  - Claude asks whether you trust the chat folder. Press Enter to say yes.")
+    if "codex" in keys:
+        ui.say("  - Codex may show a welcome screen or ask about the folder. Choose the first option and press Enter.")
+    if sys.platform == "darwin":
+        ui.say("  - If your Mac offers to install \"command line developer tools\", click Cancel. The chat "
+               "doesn't need them.")
 
 
 # ---------------------------------------------------------------------------- launch
@@ -370,6 +420,18 @@ def cmd_doctor(a, ui: UI) -> int:
         ui.ok(f"Chat folder {folder} is complete.")
     if not shutil.which("uvx") and workspace.find_uvx() == "uvx":
         bad("uv is missing, so the chat app cannot reach JASP.", f"run the Full Fat install line again ({GITHUB})")
+    elif not missing:
+        import json  # noqa: PLC0415
+        try:
+            server = json.loads((folder / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["jasp"]
+            ok, detail = connector.warm(server, folder)
+        except (OSError, ValueError, KeyError) as e:
+            ok, detail = False, str(e)
+        if ok:
+            ui.ok("The link between the chat and JASP starts.")
+        else:
+            bad(f"The link between the chat and JASP does not start ({detail}).",
+                "check the internet connection and run full-fat setup again")
     for x in st.get("launchers", []):
         if not Path(x).exists():
             bad(f"The Talk to JASP icon {x} is gone.", "run full-fat setup again")
@@ -422,6 +484,16 @@ def cmd_uninstall(a, ui: UI) -> int:
             else:
                 s.set(jasp.KEY_ENABLED, str(prev).lower() in ("true", "1"))
         ui.ok("JASP's connection for AI apps is back to how it was before Full Fat.")
+    trusted = st.get("codex_trust_added")
+    if trusted:
+        r = apps.untrust_codex_folder(trusted)
+        if r == "removed":
+            ui.ok("Removed the trust entry Full Fat had added for Codex.")
+        elif r == "left":
+            ui.say(f"  Codex's trust entry for {trusted} was left in {apps.codex_home() / 'config.toml'}.")
+        backup = apps.codex_home() / "config.toml.before-full-fat"
+        if backup.exists():
+            ui.say(f"  Codex's settings from before Full Fat are kept in {backup}")
     sf = state.state_file()
     if sf.exists():
         sf.unlink()
@@ -445,6 +517,8 @@ def parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd")
     s = sub.add_parser("setup", parents=[common], help="set everything up (the default)")
     s.add_argument("--app", choices=["claude", "codex", "both"], help="which chat app to set up")
+    s.add_argument("--plan", choices=["pro", "max"],
+                   help="your Claude plan: max starts on Opus, pro on Claude Code's default (found when signed in)")
     s.add_argument("--persona", help="JASP persona: alfred, socrates, evelyn or none (default alfred)")
     s.add_argument("--careful", action=argparse.BooleanOptionalAction, default=None,
                    help="ask before every change to JASP; reading JASP still runs without asking")

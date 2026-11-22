@@ -34,15 +34,28 @@ from .prompts import Prompts
 
 JASP_MCP_SHA = "72d9d7be9c003b9681b40871ee5850795108e5ab"  # jasp-stats/jasp-mcp, 2026-05-13
 # jasp-mcp crashes with the MCP Python SDK 2.x ("'Server' object has no attribute 'list_tools'"),
-# so uvx is told to use mcp<2.
-UVX_ARGS = ["--with", "mcp<2", "--from", f"git+https://github.com/jasp-stats/jasp-mcp@{JASP_MCP_SHA}", "jasp-mcp"]
+# so uvx is told to use mcp<2. It is fetched as a GitHub archive, not git+https, because fresh Macs and
+# Windows PCs have no git (on a Mac, calling git opens Apple's "install developer tools" dialog instead).
+JASP_MCP_URL = f"https://github.com/jasp-stats/jasp-mcp/archive/{JASP_MCP_SHA}.zip"
+UVX_ARGS = ["--with", "mcp<2", "--from", f"jasp-mcp @ {JASP_MCP_URL}", "jasp-mcp"]
 
-# JASP RPC methods that only read (from rpc_discover on JASP 0.98.1). The others change JASP:
-# analysis_create, analysis_run, analysis_createAnnotation, analysis_composeResults, data_load, write_report.
+# JASP RPC methods that only read (from rpc_discover on JASP 0.98.1).
 READ_ONLY_TOOLS = [
     "jasp_ping", "jasp_rpc_discover", "jasp_modules_list", "jasp_analyses_list", "jasp_get_analyses_state",
     "jasp_analysis_results", "jasp_analysis_context", "jasp_data_info", "jasp_data_load_status",
 ]
+# The tools JASP's own assistant gets with every shipped persona (enabledCapabilities ["*"]): all methods in
+# Resources/JASP_Capabilities.json (v0.98.1 and development), resolved in Desktop/gui/aipersonamodel.cpp
+# (v0.98.1 lines 402-433). They change only what is inside JASP: write_report makes a report in the results
+# pane (Desktop/analysis/analyses.cpp line 1697), not a file. These run without asking by default.
+JASP_ASSISTANT_TOOLS = [
+    "jasp_modules_list", "jasp_analysis_create", "jasp_analysis_run", "jasp_get_analyses_state",
+    "jasp_write_report", "jasp_analysis_createAnnotation", "jasp_analyses_list", "jasp_analysis_results",
+    "jasp_analysis_context", "jasp_data_info",
+]
+# Not given to JASP's own assistant, so they always ask: jasp_data_load (opens a data file from any path and
+# replaces the data in JASP, Desktop/mainwindow.cpp line 1460) and jasp_analysis_composeResults.
+DEFAULT_TOOLS = JASP_ASSISTANT_TOOLS + [t for t in READ_ONLY_TOOLS if t not in JASP_ASSISTANT_TOOLS]
 # Claude Code tools the JASP assistant has no use for. JASP's own assistant has none of them.
 BLOCKED_CLAUDE_TOOLS = ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit"]
 MANIFEST = ".full-fat.json"
@@ -113,7 +126,10 @@ def agents_md(prompts: Prompts, persona: str) -> str:
     text = template("environment.md") + prompts.system + "\n"
     if persona != "none":
         _, prompt = prompts.personas[persona]
-        text += "\nPersona Prompt:\n" + "".join("  " + line + "\n" for line in prompt.strip().split("\n"))
+        name, _ = prompts.personas[persona]
+        # as Desktop/ai/aiBridge.cpp (v0.98.1 lines 587-589) builds it
+        text += ("\nPersona Prompt:\n" + f"  Your name is: {name}\n\n"
+                 + "".join("  " + line + "\n" for line in prompt.strip().split("\n")))
     return text
 
 
@@ -129,9 +145,11 @@ def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
         'model_reasoning_effort = "high"',
         "# Codex may read files but not change them or run programs that change things.",
         'sandbox_mode = "read-only"',
+        "# No shell: JASP's own assistant has none, and the chat doesn't need one.",
+        "features.shell_tool = false",
+        "# You answer approval questions yourself, not Codex's automatic reviewer.",
+        'approvals_reviewer = "user"',
     ]
-    if careful:  # you approve each change yourself, not Codex's automatic reviewer
-        lines += ['approvals_reviewer = "user"']
     lines += [
         "",
         "[mcp_servers.jasp]",
@@ -140,21 +158,28 @@ def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
         f'env = {{ JASP_RPC_URL = "http://{host}:{port}/rpc" }}',
     ]
     if careful:
-        lines += ["# Careful mode: ask before anything that changes JASP; reading runs without asking.",
-                  'default_tools_approval_mode = "prompt"']
-        for t in READ_ONLY_TOOLS:
-            lines += ["", f"[mcp_servers.jasp.tools.{t}]", 'approval_mode = "approve"']
+        lines += ["# Careful mode: ask before anything that changes JASP. Reading runs without asking."]
     else:
-        lines += ["# Like the chat inside JASP: the JASP tools run without asking.",
-                  'default_tools_approval_mode = "approve"']
+        lines += ["# Like the chat inside JASP: its tools run without asking. Loading a data file asks."]
+    lines += ['default_tools_approval_mode = "prompt"']
+    for t in (READ_ONLY_TOOLS if careful else DEFAULT_TOOLS):
+        lines += ["", f"[mcp_servers.jasp.tools.{t}]", 'approval_mode = "approve"']
     return "\n".join(lines) + "\n"
 
 
-def merge_claude_settings(old: dict, careful: bool, read_rules: list[str]) -> dict:
+def merge_claude_settings(old: dict, careful: bool, read_rules: list[str], model: str | None = "opus",
+                          model_was_ours: bool = False) -> dict:
+    """model: what to set ("opus" for Max), or None to leave Claude Code's default (Pro).
+    model_was_ours: the current value was written by Full Fat, so it may be changed or removed."""
     new = json.loads(template("claude-settings.json"))
     out = dict(old)
-    for k in ("model", "effortLevel"):
-        out.setdefault(k, new[k])
+    ours = model_was_ours
+    if model:
+        if "model" not in out or ours:
+            out["model"] = model
+    elif ours and "model" in out:
+        del out["model"]
+    out.setdefault("effortLevel", new["effortLevel"])
     servers = list(out.get("enabledMcpjsonServers") or [])
     if "jasp" not in servers:
         servers.append("jasp")
@@ -169,7 +194,7 @@ def merge_claude_settings(old: dict, careful: bool, read_rules: list[str]) -> di
         return rule.startswith("mcp__jasp") or (rule.startswith("Read(") and "JASP" in rule and "temp" in rule)
 
     allow = [r for r in perms.get("allow") or [] if not ours_allow(r)]
-    allow += (["mcp__jasp__" + t for t in READ_ONLY_TOOLS] if careful else ["mcp__jasp"]) + read_rules
+    allow += ["mcp__jasp__" + t for t in (READ_ONLY_TOOLS if careful else DEFAULT_TOOLS)] + read_rules
     deny = [r for r in perms.get("deny") or [] if r not in BLOCKED_CLAUDE_TOOLS]
     deny += BLOCKED_CLAUDE_TOOLS
     perms["allow"] = allow
@@ -205,7 +230,7 @@ def _load_json(path: Path, result: Result, stamp: str) -> dict:
 
 def build(folder: Path, prompts: Prompts, persona: str, careful: bool, host: str, port: int,
           plot_dirs: list[Path], uvx: str | None = None, home: Path | None = None,
-          platform: str | None = None) -> Result:
+          platform: str | None = None, claude_model: str | None = "opus") -> Result:
     folder = Path(folder)
     home = home or Path.home()
     uvx = uvx or find_uvx()
@@ -256,7 +281,7 @@ def build(folder: Path, prompts: Prompts, persona: str, careful: bool, host: str
     if claude_md.exists() and "@AGENTS.md" in claude_md.read_text(encoding="utf-8", errors="replace"):
         pass  # yours or ours: either way it already pulls in AGENTS.md
     else:
-        write_text("CLAUDE.md", template("CLAUDE.md"))
+        write_text("CLAUDE.md", template("claude-md.txt"))
     ann = annotate_md(prompts)
     if ann is not None:
         write_text(".claude/commands/annotate.md", ann)
@@ -274,11 +299,16 @@ def build(folder: Path, prompts: Prompts, persona: str, careful: bool, host: str
     settings_path = folder / ".claude" / "settings.json"
     settings = _load_json(settings_path, result, stamp)
     rules = plot_rules(plot_dirs, home, platform)
-    _write_json(settings_path, merge_claude_settings(settings, careful, rules))
+    if isinstance(manifest, dict) and "claude_model" in manifest:
+        was_ours = settings.get("model") == manifest.get("claude_model") and "model" in settings
+    else:  # no manifest: the old setup.sh always wrote "opus"
+        was_ours = settings.get("model") == "opus"
+    _write_json(settings_path, merge_claude_settings(settings, careful, rules, claude_model, was_ours))
     result.written.append(".claude/settings.json")
 
     _write_json(manifest_path, {"full_fat": __version__, "jasp_ref": prompts.ref, "persona": persona,
-                                "careful": careful, "host": host, "port": port, "files": new_hashes})
+                                "careful": careful, "host": host, "port": port, "claude_model": claude_model,
+                                "files": new_hashes})
     return result
 
 

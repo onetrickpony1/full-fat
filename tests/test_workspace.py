@@ -14,10 +14,11 @@ def p(fake_github):
     return load_prompts("0.98.1", make_fetcher(fake_github))
 
 
-def build(folder, p, careful=False, persona="alfred", home=None):
+def build(folder, p, careful=False, persona="alfred", home=None, model="opus"):
     return workspace.build(folder, p, persona, careful, "127.0.0.1", 48164,
                            [Path("/home/u/.var/app/org.jaspstats.JASP/data/JASP/JASP/temp")],
-                           uvx="/home/u/.local/bin/uvx", home=home or Path("/home/u"), platform="linux")
+                           uvx="/home/u/.local/bin/uvx", home=home or Path("/home/u"), platform="linux",
+                           claude_model=model)
 
 
 def test_files(tmp_path, p):
@@ -35,7 +36,8 @@ def test_agents_md_layout(tmp_path, p):
     text = (tmp_path / "AGENTS.md").read_text()
     env = workspace.template("environment.md")
     assert text.startswith(env + p.system + "\n")
-    assert text.endswith("\nPersona Prompt:\n  Your name is Alfred.\n  Line two.\n")
+    assert text.endswith("\n\nPersona Prompt:\n  Your name is: Alfred the Assistant\n\n"
+                         "  Your name is Alfred.\n  Line two.\n")
     build(tmp_path, p, persona="none")
     assert "Persona Prompt" not in (tmp_path / "AGENTS.md").read_text()
     with pytest.raises(ValueError):
@@ -47,16 +49,19 @@ def test_mcp_and_codex(tmp_path, p):
     mcp = json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]["jasp"]
     assert mcp["command"] == "/home/u/.local/bin/uvx"
     assert mcp["args"] == ["--with", "mcp<2", "--from",
-                           "git+https://github.com/jasp-stats/jasp-mcp@72d9d7be9c003b9681b40871ee5850795108e5ab",
-                           "jasp-mcp"]
+                           "jasp-mcp @ https://github.com/jasp-stats/jasp-mcp/archive/"
+                           "72d9d7be9c003b9681b40871ee5850795108e5ab.zip", "jasp-mcp"]
+    assert not any("git+" in a for a in mcp["args"])
     assert mcp["env"] == {"JASP_RPC_URL": "http://127.0.0.1:48164/rpc"}
     codex = tomllib.loads((tmp_path / ".codex/config.toml").read_text())
     assert codex["model"] == "gpt-6.2-astra" and codex["model_reasoning_effort"] == "high"
-    assert codex["sandbox_mode"] == "read-only"
+    assert codex["sandbox_mode"] == "read-only" and codex["features"]["shell_tool"] is False
+    assert codex["approvals_reviewer"] == "user"
     srv = codex["mcp_servers"]["jasp"]
     assert srv["args"] == mcp["args"] and srv["env"] == mcp["env"]
-    assert srv["default_tools_approval_mode"] == "approve" and "tools" not in srv
-    assert "approvals_reviewer" not in codex
+    assert srv["default_tools_approval_mode"] == "prompt"
+    assert set(srv["tools"]) == set(workspace.DEFAULT_TOOLS)
+    assert "jasp_data_load" not in srv["tools"] and "jasp_write_report" in srv["tools"]
 
 
 def test_codex_careful(tmp_path, p):
@@ -80,13 +85,14 @@ def test_claude_settings_modes(tmp_path, p):
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
     assert s["model"] == "opus" and s["effortLevel"] == "high" and s["enabledMcpjsonServers"] == ["jasp"]
     assert s["env"]["MAX_MCP_OUTPUT_TOKENS"] == "100000"
-    assert "mcp__jasp" in s["permissions"]["allow"]
+    assert "mcp__jasp__jasp_analysis_create" in s["permissions"]["allow"]
+    assert "mcp__jasp__jasp_data_load" not in s["permissions"]["allow"]
+    assert "mcp__jasp" not in s["permissions"]["allow"]
     assert "Read(~/.var/app/org.jaspstats.JASP/data/JASP/JASP/temp/**)" in s["permissions"]["allow"]
     assert "Read(~/.local/share/JASP/JASP/temp/**)" in s["permissions"]["allow"]
     assert set(s["permissions"]["deny"]) == {"Bash", "PowerShell", "Edit", "Write", "NotebookEdit"}
     build(tmp_path, p, careful=True)
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
-    assert "mcp__jasp" not in s["permissions"]["allow"]
     assert "mcp__jasp__jasp_analyses_list" in s["permissions"]["allow"]
     assert "mcp__jasp__jasp_analysis_create" not in s["permissions"]["allow"]
 
@@ -111,7 +117,7 @@ def test_rerun_keeps_user_files_and_settings(tmp_path, p):
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
     assert s["model"] == "sonnet" and s["hooks"] == {"x": 1}
     assert "WebSearch" in s["permissions"]["allow"] and "WebFetch" in s["permissions"]["deny"]
-    assert s["permissions"]["allow"].count("mcp__jasp") == 1
+    assert s["permissions"]["allow"].count("mcp__jasp__jasp_analysis_run") == 1
     assert s["permissions"]["deny"].count("Bash") == 1
     assert "other" in json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]
     assert res.kept_old == []
@@ -138,7 +144,7 @@ def test_old_setup_sh_workspace_is_updated_without_backups(tmp_path, p):
     res = build(tmp_path, p)
     assert res.kept_old == []
     allow = json.loads((tmp_path / ".claude/settings.json").read_text())["permissions"]["allow"]
-    assert "mcp__jasp__jasp_ping" not in allow and allow.count("Read(~/.local/share/JASP/JASP/temp/**)") == 1
+    assert allow.count("mcp__jasp__jasp_ping") == 1 and allow.count("Read(~/.local/share/JASP/JASP/temp/**)") == 1
 
 
 def test_broken_json_is_kept(tmp_path, p):
@@ -164,3 +170,26 @@ def test_no_annotation_prompt(tmp_path, p):
     p.annotate = None
     build(tmp_path, p)
     assert not (tmp_path / ".claude/commands/annotate.md").exists()
+
+
+def test_model_by_plan(tmp_path, p):
+    build(tmp_path, p, model=None)  # Pro: Claude Code's own default
+    s = json.loads((tmp_path / ".claude/settings.json").read_text())
+    assert "model" not in s and s["effortLevel"] == "high"
+    build(tmp_path, p, model="opus")  # now Max
+    assert json.loads((tmp_path / ".claude/settings.json").read_text())["model"] == "opus"
+    build(tmp_path, p, model=None)  # back to Pro: Full Fat's own "opus" goes again
+    assert "model" not in json.loads((tmp_path / ".claude/settings.json").read_text())
+    s = json.loads((tmp_path / ".claude/settings.json").read_text())
+    s["model"] = "sonnet"  # the user's own choice is never touched
+    (tmp_path / ".claude/settings.json").write_text(json.dumps(s))
+    build(tmp_path, p, model="opus")
+    assert json.loads((tmp_path / ".claude/settings.json").read_text())["model"] == "sonnet"
+
+
+def test_jasp_assistant_tools_match_capabilities():
+    # Resources/JASP_Capabilities.json (v0.98.1, development): every method of every capability
+    caps = ["modules_list", "analysis_create", "analysis_run", "get_analyses_state", "write_report",
+            "analysis_createAnnotation", "analyses_list", "get_analyses_state", "analysis_results",
+            "analysis_context", "data_info"]
+    assert set(workspace.JASP_ASSISTANT_TOOLS) == {"jasp_" + c for c in caps}

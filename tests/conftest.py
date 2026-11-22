@@ -47,6 +47,9 @@ def fake_github():
 
 
 @pytest.fixture(autouse=True)
-def isolated_config(tmp_path, monkeypatch):
+def isolated_config(tmp_path, monkeypatch, request):
+    if "real_connector" not in request.keywords:
+        from full_fat import connector
+        monkeypatch.setattr(connector, "warm", lambda server, cwd, timeout=300: (True, ""))
     monkeypatch.setenv("FULL_FAT_CONFIG", str(tmp_path / "ff-config"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
