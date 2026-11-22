@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "jasp": {
+      "command": "uvx",
+      "args": ["--with", "mcp<2", "--from", "git+https://github.com/jasp-stats/jasp-mcp@__JASP_MCP_REF__", "jasp-mcp"],
+      "env": { "JASP_RPC_URL": "http://__RPC_HOST__:__RPC_PORT__/rpc" }
+    }
+  }
+}
