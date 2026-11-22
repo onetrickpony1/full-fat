@@ -28,6 +28,15 @@ v0.98.8, v0.99.0 and development on 2026-11-22):
   CFBundleShortVersionString only major.minor.
 - Tools/windows/msix/AppxManifest-*.xml.in: package names 45842JASP.JASP (Store), 45842JASP.JASPBeta,
   JASP.STANDALONE and JASP.SIDELOAD.NIGHTLY; application id JASP.
+- When rpcServerEnabled is read: only once, at the end of the main window's constructor
+  (Desktop/mainwindow.cpp v0.98.0 line 198, v0.98.1 200, v0.98.8 215, v0.99.0 216, development 215:
+  `if (rpcServerEnabled() && !_rpcServer->start())`). Nothing starts or stops the server later. JASP writes the
+  key only when the user ticks one of its two checkboxes (PrefsAI.qml, PrefsAdvanced.qml `onCheckedChanged`)
+  or resets the AI settings (preferencesmodel.cpp `resetAiDefaults`), and its setter returns early when the
+  value is unchanged (`SET_PREF_FUNCTION`). QSettings writes back only keys JASP itself changed, so a value
+  changed on disk while JASP runs stays. Hence the link: switch on, start JASP, wait until it answers, switch
+  off (see link.py). Development also has a session-only `--rpcPort` argument (parsedarguments.cpp), not in
+  any release up to 0.99.0.
 """
 
 from __future__ import annotations
@@ -152,12 +161,22 @@ def ini_remove(text: str, key: str) -> str:
     return nl.join(keep) + nl
 
 
+def _read(path: Path) -> str:
+    """The file exactly as it is, line endings included."""
+    with open(path, encoding="utf-8", errors="replace", newline="") as f:
+        return f.read()
+
+
 def _atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".full-fat-tmp")
+    """Replace the file safely: through a symlink to the real file, keeping its permissions."""
+    real = Path(os.path.realpath(path))
+    real.parent.mkdir(parents=True, exist_ok=True)
+    tmp = real.with_name(real.name + ".full-fat-tmp")
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         f.write(text)
-    os.replace(tmp, path)
+    if real.exists():
+        shutil.copymode(real, tmp)
+    os.replace(tmp, real)
 
 
 # ---------------------------------------------------------------------------- settings stores
@@ -182,7 +201,7 @@ class Store:
     def get(self, key: str) -> str | None:
         if self.kind == "ini":
             try:
-                return ini_get(self.path.read_text(encoding="utf-8", errors="replace"), key)
+                return ini_get(_read(self.path), key)
             except OSError:
                 return None
         r = run(["defaults", "read", self.domain, key])
@@ -212,7 +231,7 @@ class Store:
 
     def set(self, key: str, value: bool) -> None:
         if self.kind == "ini":
-            text = self.path.read_text(encoding="utf-8") if self.exists() else ""
+            text = _read(self.path) if self.exists() else ""
             _atomic_write(self.path, ini_set(text, key, "true" if value else "false"))
             return
         r = run(["defaults", "write", self.domain, key, "-bool", "true" if value else "false"])
@@ -222,7 +241,7 @@ class Store:
     def remove(self, key: str) -> None:
         if self.kind == "ini":
             if self.exists():
-                _atomic_write(self.path, ini_remove(self.path.read_text(encoding="utf-8"), key))
+                _atomic_write(self.path, ini_remove(_read(self.path), key))
             return
         run(["defaults", "delete", self.domain, key])
 

@@ -22,6 +22,8 @@ from pathlib import Path
 
 import tomllib
 
+from . import workspace
+
 
 @dataclass(frozen=True)
 class App:
@@ -104,6 +106,28 @@ def codex_home() -> Path:
     return Path(v) if v else Path.home() / ".codex"
 
 
+def read_keep(path: Path) -> str:
+    """A text file exactly as it is, line endings included."""
+    with open(path, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def write_keep(path: Path, text: str) -> None:
+    """Replace a settings file safely: through a symlink to the real file, keeping its permissions."""
+    real = Path(os.path.realpath(path))
+    real.parent.mkdir(parents=True, exist_ok=True)
+    tmp = real.with_name(real.name + ".full-fat-tmp")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    if real.exists():
+        shutil.copymode(real, tmp)
+    os.replace(tmp, real)
+
+
+def _newline(text: str) -> str:
+    return "\r\n" if "\r\n" in text else "\n"
+
+
 def _toml_key(path: str) -> str:
     if "'" not in path:
         return f"'{path}'"
@@ -133,14 +157,18 @@ def codex_trust_text(config_text: str, folder: str) -> str | None:
     state = codex_trust_state(config_text, folder)
     if state is not None:
         return None
-    sep = "" if not config_text or config_text.endswith("\n\n") else ("\n" if config_text.endswith("\n") else "\n\n")
-    return config_text + sep + trust_block(folder)
+    nl = _newline(config_text)
+    if not config_text or config_text.endswith(nl + nl):
+        sep = ""
+    else:
+        sep = nl if config_text.endswith(nl) else nl + nl
+    return config_text + sep + trust_block(folder, nl)
 
 
 def trust_codex_folder(folder: Path) -> str:
     """Mark the folder as trusted for Codex. Returns 'added', 'already', 'untrusted' or 'skipped'."""
     cfg = codex_home() / "config.toml"
-    text = cfg.read_text(encoding="utf-8") if cfg.is_file() else ""
+    text = read_keep(cfg) if cfg.is_file() else ""
     state = codex_trust_state(text, str(folder))
     if state == "trusted":
         return "already"
@@ -160,15 +188,12 @@ def trust_codex_folder(folder: Path) -> str:
     backup = cfg.with_name("config.toml.before-full-fat")
     if cfg.is_file() and not backup.exists():
         shutil.copy2(cfg, backup)
-    tmp = cfg.with_name("config.toml.full-fat-tmp")
-    with open(tmp, "w", encoding="utf-8", newline="") as f:
-        f.write(new)
-    os.replace(tmp, cfg)
+    write_keep(cfg, new)
     return "added"
 
 
-def trust_block(folder: str) -> str:
-    return f"[projects.{_toml_key(folder)}]\ntrust_level = \"trusted\"\n"
+def trust_block(folder: str, nl: str = "\n") -> str:
+    return f"[projects.{_toml_key(folder)}]{nl}trust_level = \"trusted\"{nl}"
 
 
 def untrust_codex_folder(folder: str) -> str:
@@ -176,20 +201,83 @@ def untrust_codex_folder(folder: str) -> str:
     cfg = codex_home() / "config.toml"
     if not cfg.is_file():
         return "absent"
-    text = cfg.read_text(encoding="utf-8")
-    block = trust_block(folder)
+    text = read_keep(cfg)
+    nl = _newline(text)
+    block = trust_block(folder, nl)
     if block not in text:
         return "absent" if codex_trust_state(text, folder) is None else "left"
     i = text.rindex(block)
-    new = text[:i].rstrip("\n") + ("\n" if text[:i].strip() else "") + text[i + len(block):]
-    if codex_trust_state(new, folder) not in (None,):
+    before, after = text[:i], text[i + len(block):]
+    # Keys written below the block belong to its table. Removing the header would move them into the table
+    # above, so the block is only removed when a new table or the end of the file follows it.
+    rest = [ln.strip() for ln in after.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    if rest and not rest[0].startswith("["):
         return "left"
-    tmp = cfg.with_name("config.toml.full-fat-tmp")
-    with open(tmp, "w", encoding="utf-8", newline="") as f:
-        f.write(new)
-    os.replace(tmp, cfg)
+    new = before.rstrip("\r\n") + (nl if before.strip() else "") + after
+    try:
+        if codex_trust_state(new, folder) is not None or tomllib.loads(new) != _without(tomllib.loads(text), folder):
+            return "left"
+    except tomllib.TOMLDecodeError:
+        return "left"
+    write_keep(cfg, new)
     return "removed"
 
 
-def launch_command(app: App, exe: str, intro: str) -> list[str]:
-    return [exe, intro]
+def _without(data: dict, folder: str) -> dict:
+    out = dict(data)
+    projects = {k: v for k, v in (out.get("projects") or {}).items() if k != folder}
+    if projects:
+        out["projects"] = projects
+    else:
+        out.pop("projects", None)
+    return out
+
+
+# ---------------------------------------------------------------------------- starting the chat
+
+def claude_settings_files(folder: Path) -> list[Path]:
+    """Claude Code's settings that can choose the model: the user's own, then the chat folder's."""
+    user = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    return [user / "settings.json", folder / ".claude" / "settings.json", folder / ".claude" / "settings.local.json"]
+
+
+def _json_keys(paths: list[Path]) -> set[str]:
+    keys: set[str] = set()
+    for p in paths:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict):
+            keys |= set(data)
+    return keys
+
+
+def _toml_keys(paths: list[Path]) -> set[str]:
+    keys: set[str] = set()
+    for p in paths:
+        try:
+            keys |= set(tomllib.loads(p.read_text(encoding="utf-8")))
+        except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+            continue
+    return keys
+
+
+def launch_command(app: App, exe: str, intro: str, folder: Path | None = None) -> list[str]:
+    """The chat app's command. It starts on the top model at high effort, unless a settings file already
+    chooses the model or effort (for example after /model or /effort saved a default): then that one wins."""
+    folder = Path(folder) if folder else Path.cwd()
+    cmd = [exe]
+    if app.key == "claude":
+        have = _json_keys(claude_settings_files(folder))
+        if "model" not in have:
+            cmd += ["--model", workspace.CLAUDE_MODEL]
+        if "effortLevel" not in have:
+            cmd += ["--effort", workspace.CLAUDE_EFFORT]
+    else:
+        have = _toml_keys([codex_home() / "config.toml", folder / ".codex" / "config.toml"])
+        if "model" not in have:
+            cmd += ["-m", workspace.CODEX_MODEL]
+        if "model_reasoning_effort" not in have:
+            cmd += ["-c", f'model_reasoning_effort="{workspace.CODEX_EFFORT}"']
+    return cmd + [intro]

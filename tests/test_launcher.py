@@ -31,3 +31,13 @@ def test_create_here(tmp_path, monkeypatch):
     assert made and made[0].parent == desk and "Full Fat" in made[0].name
     if os.name != "nt":
         assert made[0].stat().st_mode & stat.S_IXUSR
+
+
+def test_shell_command_for_pasting():
+    import os
+    from full_fat import launcher
+    if os.name == "nt":
+        assert launcher.shell_command(["C:/Users/a b/full-fat.exe", "launch"]) == "& 'C:/Users/a b/full-fat.exe' 'launch'"
+    else:
+        assert launcher.shell_command(["/Users/a b/.local/bin/full-fat", "launch"]) == \
+            "'/Users/a b/.local/bin/full-fat' launch"

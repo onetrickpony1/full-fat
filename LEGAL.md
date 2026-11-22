@@ -7,14 +7,17 @@ This notice applies to Full Fat (the "Software"). By installing or running it, y
 Full Fat is a setup tool that runs on your own computer. It:
 
 - reads and changes one setting of JASP on your computer (`rpcServerEnabled`, the "Enable MCP server" option),
-  only while JASP is closed and after making a backup;
+  after making a backup. Full Fat switches JASP's AI link on only while a Full Fat chat has JASP open, because
+  while it is on, other programs on the computer can reach JASP: it switches the setting on, opens JASP, and
+  switches it off again as soon as JASP answers. If you had switched it on yourself before, it stays on;
 - downloads text from JASP's public source code on GitHub (the AI system prompt, the annotation prompt and the
   persona prompts in [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop));
 - writes configuration files for Claude Code and Codex CLI into a folder on your computer (`~/Full Fat` unless
-  you choose another), and a "Full Fat" launcher icon;
+  you choose another), and a "Full Fat" launcher icon. `full-fat uninstall` removes only the files it wrote;
 - adds a trust entry for that folder to Codex's settings (`~/.codex/config.toml`) when you set up Codex;
-- can run the official installers of Claude Code (Anthropic) and Codex CLI (OpenAI), and their sign-in commands,
-  when you agree to it.
+- can run the official installers of Claude Code (Anthropic) and Codex CLI (OpenAI) when you answer yes (or
+  when you run it with `--install-apps`), and their sign-in commands when you agree to it;
+- starts Claude Code or Codex in that folder when you double-click the icon, and opens JASP for it.
 
 Everything that is downloaded, and from where:
 

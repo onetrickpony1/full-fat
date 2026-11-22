@@ -14,11 +14,10 @@ def p(fake_github):
     return load_prompts("0.98.1", make_fetcher(fake_github))
 
 
-def build(folder, p, careful=False, persona="alfred", home=None, model="opus"):
+def build(folder, p, careful=False, persona="alfred", home=None):
     return workspace.build(folder, p, persona, careful, "127.0.0.1", 48164,
                            [Path("/home/u/.var/app/org.jaspstats.JASP/data/JASP/JASP/temp")],
-                           uvx="/home/u/.local/bin/uvx", home=home or Path("/home/u"), platform="linux",
-                           claude_model=model)
+                           uvx="/home/u/.local/bin/uvx", home=home or Path("/home/u"), platform="linux")
 
 
 def test_files(tmp_path, p):
@@ -48,20 +47,25 @@ def test_mcp_and_codex(tmp_path, p):
     build(tmp_path, p)
     mcp = json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]["jasp"]
     assert mcp["command"] == "/home/u/.local/bin/uvx"
-    assert mcp["args"] == ["--with", "mcp<2", "--from",
-                           "jasp-mcp @ https://github.com/jasp-stats/jasp-mcp/archive/"
-                           "72d9d7be9c003b9681b40871ee5850795108e5ab.zip", "jasp-mcp"]
+    wheels = [a for p in ("cryptography", "cffi", "pydantic-core", "rpds-py") for a in ("--no-build-package", p)]
+    assert mcp["args"] == wheels + ["--with", "mcp<2", "--from",
+                                    "jasp-mcp @ https://github.com/jasp-stats/jasp-mcp/archive/"
+                                    "72d9d7be9c003b9681b40871ee5850795108e5ab.zip", "jasp-mcp"]
+    assert "--no-build" not in mcp["args"]  # jasp-mcp itself must still be built from its archive
     assert not any("git+" in a for a in mcp["args"])
     assert mcp["env"] == {"JASP_RPC_URL": "http://127.0.0.1:48164/rpc"}
     codex = tomllib.loads((tmp_path / ".codex/config.toml").read_text())
-    assert codex["model"] == "gpt-6.2-astra" and codex["model_reasoning_effort"] == "high"
+    assert "model" not in codex and "model_reasoning_effort" not in codex  # so /model lasts
     assert codex["sandbox_mode"] == "read-only" and codex["features"]["shell_tool"] is False
-    assert codex["approvals_reviewer"] == "user"
+    assert codex["approvals_reviewer"] == "user" and codex["approval_policy"] == "on-request"
+    assert codex["web_search"] == "disabled"
     srv = codex["mcp_servers"]["jasp"]
     assert srv["args"] == mcp["args"] and srv["env"] == mcp["env"]
     assert srv["default_tools_approval_mode"] == "prompt"
     assert set(srv["tools"]) == set(workspace.DEFAULT_TOOLS)
-    assert "jasp_data_load" not in srv["tools"] and "jasp_write_report" in srv["tools"]
+    for t in ("jasp_data_load", "jasp_write_report", "jasp_analysis_createAnnotation", "jasp_analysis_composeResults"):
+        assert t not in srv["tools"]  # these ask (default_tools_approval_mode)
+    assert "jasp_analysis_run" in srv["tools"]
 
 
 def test_codex_careful(tmp_path, p):
@@ -83,10 +87,13 @@ def test_codex_windows_path_quoting():
 def test_claude_settings_modes(tmp_path, p):
     build(tmp_path, p)
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
-    assert s["model"] == "opus" and s["effortLevel"] == "high" and s["enabledMcpjsonServers"] == ["jasp"]
+    assert "model" not in s and "effortLevel" not in s and s["enabledMcpjsonServers"] == ["jasp"]
     assert s["env"]["MAX_MCP_OUTPUT_TOKENS"] == "100000"
+    assert s["permissions"]["defaultMode"] == "default"
     assert "mcp__jasp__jasp_analysis_create" in s["permissions"]["allow"]
-    assert "mcp__jasp__jasp_data_load" not in s["permissions"]["allow"]
+    asking = {"mcp__jasp__jasp_" + t for t in ("data_load", "write_report", "analysis_createAnnotation",
+                                                 "analysis_composeResults")}
+    assert set(s["permissions"]["ask"]) == asking and not asking & set(s["permissions"]["allow"])
     assert "mcp__jasp" not in s["permissions"]["allow"]
     assert "Read(~/.var/app/org.jaspstats.JASP/data/JASP/JASP/temp/**)" in s["permissions"]["allow"]
     assert "Read(~/.local/share/JASP/JASP/temp/**)" in s["permissions"]["allow"]
@@ -95,6 +102,13 @@ def test_claude_settings_modes(tmp_path, p):
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
     assert "mcp__jasp__jasp_analyses_list" in s["permissions"]["allow"]
     assert "mcp__jasp__jasp_analysis_create" not in s["permissions"]["allow"]
+    assert "mcp__jasp__jasp_analysis_create" in s["permissions"]["ask"]
+    s["permissions"]["defaultMode"] = "plan"  # the user's own choice of mode stays
+    s["permissions"]["ask"].append("Read(/secret/**)")
+    (tmp_path / ".claude/settings.json").write_text(json.dumps(s))
+    build(tmp_path, p)
+    s = json.loads((tmp_path / ".claude/settings.json").read_text())
+    assert s["permissions"]["defaultMode"] == "plan" and "Read(/secret/**)" in s["permissions"]["ask"]
 
 
 def test_rerun_keeps_user_files_and_settings(tmp_path, p):
@@ -152,7 +166,7 @@ def test_broken_json_is_kept(tmp_path, p):
     (tmp_path / ".claude/settings.json").write_text("{not json")
     res = build(tmp_path, p)
     assert any(x.endswith(tuple("0123456789")) for x in res.kept_old)
-    assert json.loads((tmp_path / ".claude/settings.json").read_text())["model"] == "opus"
+    assert json.loads((tmp_path / ".claude/settings.json").read_text())["permissions"]["defaultMode"] == "default"
 
 
 def test_read_rules():
@@ -172,19 +186,31 @@ def test_no_annotation_prompt(tmp_path, p):
     assert not (tmp_path / ".claude/commands/annotate.md").exists()
 
 
-def test_model_ownership(tmp_path, p):
-    build(tmp_path, p, model=None)  # no model wanted: none written
-    s = json.loads((tmp_path / ".claude/settings.json").read_text())
-    assert "model" not in s and s["effortLevel"] == "high"
-    build(tmp_path, p, model="opus")
-    assert json.loads((tmp_path / ".claude/settings.json").read_text())["model"] == "opus"
-    build(tmp_path, p, model=None)  # Full Fat's own "opus" may be taken back
-    assert "model" not in json.loads((tmp_path / ".claude/settings.json").read_text())
-    s = json.loads((tmp_path / ".claude/settings.json").read_text())
-    s["model"] = "sonnet"  # the user's own choice is never touched
-    (tmp_path / ".claude/settings.json").write_text(json.dumps(s))
-    build(tmp_path, p, model="opus")
-    assert json.loads((tmp_path / ".claude/settings.json").read_text())["model"] == "sonnet"
+def test_model_and_effort_left_to_the_user(tmp_path, p):
+    # an earlier Full Fat wrote model "opus" and effortLevel "high": both are taken back out
+    build(tmp_path, p)
+    sp, mp = tmp_path / ".claude/settings.json", tmp_path / ".full-fat.json"
+    s = json.loads(sp.read_text())
+    s.update(model="opus", effortLevel="high")
+    sp.write_text(json.dumps(s))
+    m = json.loads(mp.read_text())
+    m["claude_model"] = "opus"
+    mp.write_text(json.dumps(m))
+    build(tmp_path, p)
+    s = json.loads(sp.read_text())
+    assert "model" not in s and "effortLevel" not in s
+    s.update(model="sonnet", effortLevel="low")  # the user's own choices are never touched
+    sp.write_text(json.dumps(s))
+    build(tmp_path, p)
+    s = json.loads(sp.read_text())
+    assert s["model"] == "sonnet" and s["effortLevel"] == "low"
+
+
+def test_manifest_lists_the_json_files(tmp_path, p):
+    build(tmp_path, p)
+    files = json.loads((tmp_path / ".full-fat.json").read_text())["files"]
+    for rel in (".mcp.json", ".claude/settings.json", "AGENTS.md"):
+        assert files[rel] == workspace.sha((tmp_path / rel).read_text())
 
 
 def test_jasp_assistant_tools_match_capabilities():

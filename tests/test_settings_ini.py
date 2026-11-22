@@ -58,3 +58,22 @@ def test_store_creates_missing_file(tmp_path):
     assert s.backup(tmp_path / "bk") is None
     s.set("rpcServerEnabled", True)
     assert s.enabled()
+
+
+def test_store_keeps_crlf_symlink_and_mode(tmp_path):
+    import os
+    import pytest
+    if os.name == "nt":
+        pytest.skip("symlinks and file modes are POSIX here")
+    real = tmp_path / "real" / "JASP.ini"
+    real.parent.mkdir()
+    real.write_bytes(b"[General]\r\nfoo=1\r\n")
+    os.chmod(real, 0o640)
+    link = tmp_path / "JASP.ini"
+    link.symlink_to(real)
+    s = Store("ini", "JASP", path=link)
+    s.set("rpcServerEnabled", True)
+    assert link.is_symlink() and real.read_bytes() == b"[General]\r\nfoo=1\r\nrpcServerEnabled=true\r\n"
+    assert oct(real.stat().st_mode & 0o777) == "0o640"
+    s.remove("rpcServerEnabled")
+    assert real.read_bytes() == b"[General]\r\nfoo=1\r\n"

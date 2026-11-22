@@ -2,6 +2,10 @@ name: tests
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
+# Actions are pinned to commits (the tag is in the comment). All run on Node 24.
 jobs:
   test:
     strategy:
@@ -11,8 +15,8 @@ jobs:
         python: ["3.11", "3.x"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e ".[test]"
@@ -20,9 +24,9 @@ jobs:
       - run: full-fat --help
       - run: full-fat --version
 
-  # The one-line installers, run for real with a stand-in JASP settings file (no JASP installed), and with
-  # git unusable as on a fresh Mac or Windows PC: setup starts JASP's connector once, so this proves that
-  # jasp-mcp installs without git.
+  # The one-line installers, run from the checked-out code (not the published link) with a stand-in JASP
+  # settings file (no JASP installed), stand-in chat apps, --yes, and git unusable as on a fresh Mac or Windows
+  # PC: setup starts JASP's connector once, so this proves that jasp-mcp installs without git.
   installer:
     strategy:
       fail-fast: false
@@ -32,12 +36,15 @@ jobs:
     env:
       FULL_FAT_SOURCE: ${{ github.workspace }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Desktop and gio for the launcher check (Linux)
         if: runner.os == 'Linux'
         run: |
           mkdir -p "$HOME/Desktop"
           command -v gio || { sudo apt-get update -q && sudo apt-get install -y -q libglib2.0-bin; }
+      - name: Stand-in chat apps
+        run: $(command -v python3 || command -v python) tests/make_stand_in_apps.py "$RUNNER_TEMP/apps" "$RUNNER_TEMP/chat.log" >> "$GITHUB_ENV"
+        shell: bash
       - name: install.sh
         if: runner.os != 'Windows'
         run: |
@@ -48,8 +55,9 @@ jobs:
           if git --version; then echo "git still works"; exit 1; fi
           mkdir -p "$RUNNER_TEMP/jasp"
           printf '[General]\naiEnabled=false\n' > "$RUNNER_TEMP/jasp/JASP.conf"
-          FULL_FAT_SETUP_ARGS="--yes --settings-file $RUNNER_TEMP/jasp/JASP.conf --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in" sh install.sh
-          grep -q '^rpcServerEnabled=true' "$RUNNER_TEMP/jasp/JASP.conf"
+          FULL_FAT_SETUP_ARGS="--yes --settings-file $RUNNER_TEMP/jasp/JASP.conf --jasp-version 0.99.0 --app both --no-sign-in" sh install.sh
+          # setup leaves JASP's connection setting off: it is only switched on while Full Fat opens JASP
+          if grep -q '^rpcServerEnabled=true' "$RUNNER_TEMP/jasp/JASP.conf"; then echo "setting left on"; exit 1; fi
           test -f "$HOME/Full Fat/AGENTS.md"
           test -f "$HOME/Full Fat/.codex/config.toml"
           grep -F "[projects.'$HOME/Full Fat']" "$HOME/.codex/config.toml"
@@ -66,7 +74,8 @@ jobs:
             grep -qx 'Name=Full Fat' "$icon"
             python3 tests/e2e_check_launcher.py "$icon" "$HOME/Full Fat" --fake-jasp --double-click
           fi
-          "$HOME/.local/bin/full-fat" doctor || true
+          if grep -q '^rpcServerEnabled=true' "$RUNNER_TEMP/jasp/JASP.conf"; then echo "setting left on"; exit 1; fi
+          "$HOME/.local/bin/full-fat" doctor
           "$HOME/.local/bin/full-fat" uninstall --yes
           if [ -e "$HOME/Full Fat" ] || [ -e "$icon" ]; then echo "uninstall left the folder or icon"; exit 1; fi
           if grep -F "Full Fat']" "$HOME/.codex/config.toml"; then echo "trust entry not removed"; exit 1; fi
@@ -79,10 +88,10 @@ jobs:
           if (Get-Command git -ErrorAction SilentlyContinue) { Write-Host "git still on PATH"; exit 1 }
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\jasp" | Out-Null
           Set-Content -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Value "[General]`r`naiEnabled=false"
-          $env:FULL_FAT_SETUP_ARGS = "--yes --settings-file $env:RUNNER_TEMP\jasp\JASP.ini --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in"
+          $env:FULL_FAT_SETUP_ARGS = "--yes --settings-file $env:RUNNER_TEMP\jasp\JASP.ini --jasp-version 0.99.0 --app both --no-sign-in"
           powershell -ExecutionPolicy ByPass -File install.ps1
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          if (-not (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet)) { exit 1 }
+          if (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet) { Write-Host "setting left on"; exit 1 }
           if (-not (Test-Path "$env:USERPROFILE\Full Fat\AGENTS.md")) { exit 1 }
           $desk = [Environment]::GetFolderPath("Desktop")
           if (-not (Test-Path "$desk\Full Fat.cmd")) { exit 1 }
@@ -96,6 +105,7 @@ jobs:
           python tests/e2e_check_launcher.py "$desk\Full Fat.cmd" "$env:USERPROFILE\Full Fat" --fake-jasp
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & "$env:USERPROFILE\.local\bin\full-fat.exe" doctor
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           & "$env:USERPROFILE\.local\bin\full-fat.exe" uninstall --yes
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled' -Quiet) { exit 1 }
@@ -103,17 +113,39 @@ jobs:
           if (Test-Path "$desk\Full Fat.cmd") { Write-Host "uninstall left the icon"; exit 1 }
           if (Select-String -Path "$env:USERPROFILE\.codex\config.toml" -SimpleMatch "Full Fat']" -Quiet) { exit 1 }
 
-  # The only real macOS check: install the real JASP, let Full Fat switch on its connection through
-  # `defaults`, open JASP, and talk to it through jasp-mcp as the chat apps would.
+  # Intel Macs: the connector's packages must install there (a compiled package without an Intel wheel once
+  # stopped it). Setup starts the connector once and fails if it can't.
+  connector-intel-mac:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d  # v10.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+      - name: Stand-in chat apps
+        run: python3 tests/make_stand_in_apps.py "$RUNNER_TEMP/apps" "$RUNNER_TEMP/chat.log" >> "$GITHUB_ENV"
+      - name: Setup starts the connector
+        run: |
+          test "$(uname -m)" = x86_64
+          printf '[General]\n' > "$RUNNER_TEMP/JASP.ini"
+          full-fat setup --yes --app claude --no-sign-in --no-launcher --settings-file "$RUNNER_TEMP/JASP.ini" --jasp-version 0.99.0
+          uv cache dir
+          find "$(uv cache dir)" -maxdepth 4 -iname 'cryptography-*' | head -3
+
+  # The real macOS check: install the real JASP, let `full-fat launch` open it with its connection, talk to it
+  # through jasp-mcp, then prove that the setting is off on disk while JASP still answers, and that JASP started
+  # again without Full Fat has no connection.
   e2e-macos:
     runs-on: macos-latest
     timeout-minutes: 45
     env:
       JASP_VERSION: "0.99.0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d  # v10.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.12"
       - name: Install the real JASP
@@ -131,36 +163,42 @@ jobs:
           printf '#!/bin/sh\necho "git is not installed (CI)" >&2\nexit 127\n' > "$RUNNER_TEMP/nogit/git"
           chmod +x "$RUNNER_TEMP/nogit/git"
           echo "$RUNNER_TEMP/nogit" >> "$GITHUB_PATH"
-      - name: Full Fat setup (JASP closed, so it should switch the setting on)
+      - name: Stand-in chat app
+        run: python3 tests/make_stand_in_apps.py "$RUNNER_TEMP/apps" "$RUNNER_TEMP/chat.log" >> "$GITHUB_ENV"
+      - name: Full Fat setup (leaves the setting off)
         run: |
-          full-fat setup --yes --app claude --no-install-apps --no-sign-in
-          echo "rpcServerEnabled: $(defaults read org.jasp-stats.JASP rpcServerEnabled)"
-          test "$(defaults read org.jasp-stats.JASP rpcServerEnabled)" = 1
-          grep -c 'JASP-Stats\|Application Support/JASP' "$HOME/Full Fat/.claude/settings.json" || true
+          full-fat setup --yes --app claude --no-sign-in
+          if [ "$(defaults read org.jasp-stats.JASP rpcServerEnabled 2>/dev/null)" = 1 ]; then echo "setting left on"; exit 1; fi
           cat "$HOME/Full Fat/.claude/settings.json"
-      - name: Open JASP
+      - name: full-fat launch opens JASP with its connection
+        timeout-minutes: 20
         run: |
           # JASP's first start asks "Check for updates?" in a dialog that blocks before its connection starts
           # (Desktop/mainwindow.cpp v0.99.0 lines 197, 216, 224-244). A person answers it; CI pre-answers it.
           defaults write org.jasp-stats.JASP checkUpdatesAskUser -bool false
-          open -a /Applications/JASP.app
+          time full-fat launch --yes --wait 900
+          cat "$RUNNER_TEMP/chat.log"
+          grep -qx "$HOME/Full Fat" "$RUNNER_TEMP/chat.log"
+      - name: The setting is off on disk while JASP answers
+        run: python tests/e2e_check_link.py off "$HOME/Full Fat"
       - name: Check JASP through jasp-mcp
-        run: python tests/e2e_check_jasp.py "$HOME/Full Fat" --wait 900
+        run: python tests/e2e_check_jasp.py "$HOME/Full Fat" --wait 60
       - name: Double-click the Full Fat icon
         timeout-minutes: 8
         run: python tests/e2e_check_launcher.py "$HOME/Desktop/Full Fat.command" "$HOME/Full Fat" --double-click
       - name: full-fat doctor
-        if: always()
-        run: full-fat doctor || true
+        run: full-fat doctor
+      - name: JASP started again without Full Fat has no connection
+        timeout-minutes: 15
+        run: python tests/e2e_check_link.py restart "$HOME/Full Fat"
       - name: What JASP wrote itself (proves the settings domain)
         if: always()
         run: |
           ls -la ~/Library/Preferences | grep -i jasp || true
           defaults read org.jasp-stats.JASP || true
           ps aux | grep -i '[J]ASP' | head || true
-          ls -la ~/Library/Application\ Support/JASP/JASP 2>/dev/null || true
           screencapture -x screen.png || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: always()
         with:
           name: e2e-macos-screen
@@ -168,16 +206,17 @@ jobs:
           if-no-files-found: ignore
 
   # The same on Windows with JASP's ZIP build (no installer needed). It keeps its settings in
-  # %APPDATA%\JASP\JASP.ini, which only exists after JASP's first start, so the path is given.
+  # %APPDATA%\JASP\JASP.ini, which only exists after JASP's first start, so the path is given. Full Fat can't
+  # open a ZIP copy of JASP itself, so CI opens it while `full-fat launch` waits, as a person would.
   e2e-windows:
     runs-on: windows-latest
     timeout-minutes: 45
     env:
       JASP_VERSION: "0.99.0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d  # v10.4.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.12"
       - name: Download the real JASP (ZIP)
@@ -187,21 +226,39 @@ jobs:
           Expand-Archive jasp.zip -DestinationPath "$env:RUNNER_TEMP\JASP"
           Get-ChildItem -Recurse "$env:RUNNER_TEMP\JASP" -Filter JASPDesktop.exe | Select-Object -First 1 -ExpandProperty FullName
       - run: python -m pip install -e .
-      - name: Full Fat setup
+      - name: Stand-in chat app
+        shell: bash
+        run: python tests/make_stand_in_apps.py "$RUNNER_TEMP/apps" "$RUNNER_TEMP/chat.log" >> "$GITHUB_ENV"
+      - name: Full Fat setup (leaves the setting off)
         shell: pwsh
         run: |
-          full-fat setup --yes --app claude --no-install-apps --no-sign-in --settings-file "$env:APPDATA\JASP\JASP.ini" --jasp-version $env:JASP_VERSION
-          Get-Content "$env:APPDATA\JASP\JASP.ini"
-      - name: Open JASP
+          full-fat setup --yes --app claude --no-sign-in --settings-file "$env:APPDATA\JASP\JASP.ini" --jasp-version $env:JASP_VERSION
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if (Test-Path "$env:APPDATA\JASP\JASP.ini") {
+            if (Select-String -Path "$env:APPDATA\JASP\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet) { Write-Host "setting left on"; exit 1 }
+          }
+      - name: full-fat launch opens JASP with its connection
+        timeout-minutes: 20
         shell: pwsh
         run: |
           # pre-answer JASP's first-start "Check for updates?" dialog, which blocks its connection
-          Add-Content -Path "$env:APPDATA\JASP\JASP.ini" -Value "checkUpdatesAskUser=false"
+          New-Item -ItemType Directory -Force "$env:APPDATA\JASP" | Out-Null
+          Set-Content -Path "$env:APPDATA\JASP\JASP.ini" -Value "[General]`r`ncheckUpdatesAskUser=false"
+          $p = Start-Process full-fat -ArgumentList "launch", "--yes", "--wait", "900" -PassThru -NoNewWindow -RedirectStandardOutput launch.log
+          for ($i = 0; $i -lt 60 -and -not (Select-String -Path "$env:APPDATA\JASP\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet); $i++) { Start-Sleep 1 }
           Get-Content "$env:APPDATA\JASP\JASP.ini"
           $exe = Get-ChildItem -Recurse "$env:RUNNER_TEMP\JASP" -Filter JASPDesktop.exe | Select-Object -First 1 -ExpandProperty FullName
           Start-Process $exe
+          $p.WaitForExit()
+          Get-Content launch.log
+          if ($p.ExitCode -ne 0) { exit 1 }
+          Get-Content "$env:RUNNER_TEMP\chat.log"
+          if (-not (Select-String -Path "$env:RUNNER_TEMP\chat.log" -SimpleMatch "$env:USERPROFILE\Full Fat" -Quiet)) { exit 1 }
+      - name: The setting is off on disk while JASP answers
+        run: python tests/e2e_check_link.py off "$env:USERPROFILE\Full Fat"
+        shell: pwsh
       - name: Check JASP through jasp-mcp
-        run: python tests/e2e_check_jasp.py "$env:USERPROFILE\Full Fat" --wait 900
+        run: python tests/e2e_check_jasp.py "$env:USERPROFILE\Full Fat" --wait 60
         shell: pwsh
       - name: Double-click the Full Fat icon
         timeout-minutes: 8
@@ -209,6 +266,16 @@ jobs:
         run: |
           $desk = [Environment]::GetFolderPath("Desktop")
           python tests/e2e_check_launcher.py "$desk\Full Fat.cmd" "$env:USERPROFILE\Full Fat" --double-click
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: full-fat doctor
+        shell: pwsh
+        run: |
+          full-fat doctor
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: JASP started again without Full Fat has no connection
+        timeout-minutes: 15
+        shell: pwsh
+        run: python tests/e2e_check_link.py restart "$env:USERPROFILE\Full Fat" "$env:RUNNER_TEMP\JASP"
       - name: Diagnostics
         if: always()
         shell: pwsh

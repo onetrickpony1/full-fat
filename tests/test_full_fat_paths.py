@@ -26,7 +26,11 @@ def home(tmp_path, monkeypatch, fake_github):
     monkeypatch.setattr(launcher, "desktop_dir", lambda: h / "Desktop")
     monkeypatch.setattr(prompts, "fetch", make_fetcher(fake_github))
     monkeypatch.setattr(jasp, "running", lambda: False)
-    monkeypatch.setattr(apps, "find", lambda app: None)
+    for k in ("claude", "codex"):  # stand-in chat apps: never touch real ones
+        fake = h / "bin" / k
+        fake.parent.mkdir(exist_ok=True)
+        fake.write_text("")
+        monkeypatch.setenv(f"FULL_FAT_{k.upper()}", str(fake))
     args = ["setup", "--yes", "--settings-file", str(conf), "--jasp-version", "0.98.1", "--app", "both",
             "--no-install-apps", "--no-sign-in"]
     return h, args

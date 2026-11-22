@@ -16,6 +16,22 @@ INIT = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                    "clientInfo": {"name": "full-fat", "version": "1"}}}
 
 
+def explain(detail: str) -> str:
+    """What to tell the user about a failed start, from the connector's last line."""
+    d = (detail or "").lower()
+    where = f" (Details: {detail})" if detail else ""
+    if any(w in d for w in ("build", "compile", "rustc", "cargo", "wheel", "no solution found")):
+        return ("A part it needs could not be installed on this computer: there is no ready-made version of it "
+                "for this kind of computer." + where + " Please report this, with the details, at "
+                "https://github.com/onetrickpony1/full-fat/issues")
+    if any(w in d for w in ("dns", "network", "connect", "timed out", "timeout", "resolve", "tls", "certificate",
+                            "unreachable", "offline", "no answer in time")):
+        return "It could not download what it needs. Check the internet connection, then run Full Fat again." + where
+    if "no such file" in d or "not found" in d or "winerror 2" in d:
+        return "uv, which starts it, is missing. Run the Full Fat install line again." + where
+    return "Run Full Fat again. If it fails again, please report it with the details." + where
+
+
 def warm(server: dict, cwd: Path, timeout: float = 300) -> tuple[bool, str]:
     """Run the server command, send MCP initialize, wait for the answer, stop it.
 

@@ -11,7 +11,7 @@ import time
 import urllib.error
 from pathlib import Path
 
-from . import __version__, apps, connector, jasp, launcher, prompts, state, workspace
+from . import __version__, apps, connector, jasp, launcher, link, prompts, state, workspace
 from .ui import UI, keep, waiting
 
 GITHUB = "https://github.com/onetrickpony1/full-fat"
@@ -34,7 +34,7 @@ def check_version(j: jasp.Jasp, ui: UI) -> bool:
     ok = j.version_ok()
     need = prompts.version_string(jasp.MIN_VERSION)
     if ok is False:
-        ui.problem(f"This JASP is version {j.version}. Full Fat needs JASP {need} or newer, "
+        ui.problem(f"This JASP reports version {j.version}. Full Fat needs JASP {need} or newer, "
                    "which has the connection for AI apps.")
         ui.say(f"  Download the newest JASP from {jasp.DOWNLOAD_URL} , install it, then run this again.")
         return False
@@ -42,52 +42,38 @@ def check_version(j: jasp.Jasp, ui: UI) -> bool:
         ui.say(f"  Full Fat could not tell which JASP version this is. It needs JASP {need} or newer "
                "and will use the newest JASP instructions.")
     else:
-        ui.ok(f"JASP {j.version} found.")
+        ui.ok(f"JASP found (it reports version {j.version}; use --jasp-version if that is wrong).")
     for n in j.notes:
         ui.say("  " + n)
     return True
 
 
-def record_change(store: jasp.Store, previous: str | None) -> None:
-    st = state.load()
-    changes = [c for c in st.get("jasp_changes", []) if isinstance(c, dict)]
-    if not any(c.get("store", {}).get("path") == store.to_json()["path"]
-               and c.get("store", {}).get("domain") == store.domain for c in changes):
-        changes.append({"store": store.to_json(), "previous": previous})
-    state.save({"jasp_changes": changes})
+def quit_hint() -> str:
+    return "press Cmd+Q in JASP" if sys.platform == "darwin" else "close its window"
 
 
-def switch_on(j: jasp.Jasp, ui: UI, is_running=None) -> bool:
-    """Turn on JASP's connection for AI apps. Only while JASP is closed, and with a backup first."""
-    is_running = is_running or jasp.running
+def prepare_link(j: jasp.Jasp, ui: UI) -> bool:
+    """Setup's part: back up JASP's settings, note the original value, and leave the setting off."""
     store = j.write_store()
     if store is None:
         ui.problem("Full Fat could not find JASP's settings.")
-        ui.say('  In JASP, open Preferences > AI > MCP, tick "Enable MCP server", then close and reopen JASP.')
+        ui.say("  Run Full Fat again after opening and closing JASP once.")
         return False
-    if store.enabled():
-        ui.ok("JASP's connection for AI apps is already switched on.")
-        return True
-    if is_running():
-        if ui.yes:
-            ui.say("  JASP is open, so Full Fat did not change its settings. "
-                   "Close JASP and run Full Fat again to switch on its connection for AI apps.")
-            return False
-        ui.say("JASP is open. Full Fat needs to switch on one JASP setting, and that only works while "
-               "JASP is closed.")
-        ui.say("  Save your work in JASP, then close JASP. Full Fat waits here until it has closed.")
-        waiting(ui, "  Waiting for JASP to close...", lambda: not is_running())
-        time.sleep(2)  # let JASP finish writing its own settings
-    backup = store.backup(state.backup_dir())
-    previous = store.get(jasp.KEY_ENABLED)
-    store.set(jasp.KEY_ENABLED, True)
-    record_change(store, previous)
-    if not store.enabled():
-        ui.problem("Full Fat changed the setting but JASP's settings still say it is off.")
-        ui.say('  In JASP, open Preferences > AI > MCP and tick "Enable MCP server", then restart JASP.')
+    try:
+        rec = link.remember(store)
+        if link.users_own(rec):
+            ui.ok("JASP's connection for chats was already switched on in JASP before Full Fat, so it stays on.")
+            return True
+        was_on = store.enabled()
+        link.switch_off(store)
+    except OSError as e:
+        ui.problem(f"Full Fat could not read or change JASP's settings ({e}).")
         return False
-    where = f" A copy of the old settings is in {keep(backup)}." if backup else ""
-    ui.ok("Switched on JASP's connection for AI apps." + where)
+    if was_on:
+        ui.ok("Switched JASP's connection for chats off again. From now on Full Fat switches it on only while "
+              "it opens JASP for a chat.")
+    else:
+        ui.ok("JASP is ready. Full Fat switches on its connection for chats only while it opens JASP for you.")
     return True
 
 
@@ -103,16 +89,22 @@ def chosen_apps(a, st: dict, ui: UI) -> list[str]:
     return [["claude"], ["codex"], ["claude", "codex"]][n - 1]
 
 
-def ensure_app(app: apps.App, ui: UI, may_install: bool, may_sign_in: bool) -> str | None:
+def ensure_app(app: apps.App, ui: UI, may_install: bool, may_sign_in: bool, agreed: bool = False) -> str | None:
+    """agreed: install without asking (--install-apps). Otherwise only a person's yes installs anything."""
     exe = apps.find(app)
     if not exe:
         provider = "Anthropic" if app.key == "claude" else "OpenAI"
         if not may_install:
             ui.problem(f"{app.product} is not installed. Run Full Fat setup again to install it.")
             return None
+        if ui.yes and not agreed:
+            ui.problem(f"{app.product} is not installed. Full Fat installs it only when you say so: run Full Fat "
+                       "setup in a Terminal window and answer yes.")
+            return None
         ui.say(f"To chat with {app.name.split(' (')[0]}, you need {app.product}, the free app from {provider} "
                "that you chat in.")
-        if not ui.yes_no(f"Install {app.product} now? It takes a minute or two.", True):
+        if not agreed and not ui.yes_no(f"Install {app.product} now? It takes a minute or two.", True,
+                                        on_eof=False):
             return None
         ui.say(f"Installing {app.product} with {provider}'s own installer...")
         if not apps.install(app):
@@ -158,7 +150,7 @@ def warm_connector(folder: Path, ui: UI) -> bool:
         ui.ok("The chat can reach JASP's tools.")
     else:
         ui.problem("The part that lets the chat use JASP could not be prepared.")
-        ui.say("  Check the internet connection, then run Full Fat again." + (f" (Details: {detail})" if detail else ""))
+        ui.say("  " + connector.explain(detail))
     return ok
 
 
@@ -196,13 +188,15 @@ def cmd_setup(a, ui: UI) -> int:
     j = find_jasp(a, ui)
     if j is None or not check_version(j, ui):
         return 1
-    switched = switch_on(j, ui)
+    if not prepare_link(j, ui):
+        return 1
 
     ui.heading("Chat app")
     keys = chosen_apps(a, st, ui)
     exes = {}
     for k in keys:
-        exe = ensure_app(apps.APPS[k], ui, may_install=not a.no_install_apps, may_sign_in=not a.no_sign_in)
+        exe = ensure_app(apps.APPS[k], ui, may_install=not a.no_install_apps, may_sign_in=not a.no_sign_in,
+                         agreed=a.install_apps)
         if exe:
             exes[k] = exe
 
@@ -238,6 +232,7 @@ def cmd_setup(a, ui: UI) -> int:
             ui.say("  When Codex asks whether you trust this folder, choose yes.")
 
     launchers: list[str] = []
+    icon_place = "on your Desktop"
     if not a.no_launcher:
         if sys.platform == "darwin":
             ui.say("  If your Mac asks whether Terminal may use your Desktop folder, click Allow.")
@@ -246,10 +241,11 @@ def cmd_setup(a, ui: UI) -> int:
         except OSError:
             try:
                 launchers = [str(x) for x in launcher.create(folder, desktop=Path.home())]
+                icon_place = "in your home folder"
                 ui.say(f"  Full Fat could not put the icon on the Desktop, so it is in your home folder: "
                        f"{keep(launchers[0] if launchers else Path.home())}")
             except OSError as e:
-                ui.problem(f"Full Fat could not make the Full Fat icon ({e}). Use: full-fat launch")
+                ui.problem(f"Full Fat could not make the Full Fat icon ({e}).")
         for x in launchers:
             ui.ok(f'"{launcher.NAME}" icon: {keep(x)}')
 
@@ -260,17 +256,25 @@ def cmd_setup(a, ui: UI) -> int:
                 "launchers": launchers + old_launchers, "settings_file": a.settings_file,
                 "jasp_version": j.version})
 
+    if not exes:
+        ui.heading("Not finished")
+        ui.say("No chat app is ready yet, so there is nothing to chat in. Run Full Fat setup again in a Terminal "
+               "window: it offers to install the app and helps you sign in.")
+        return 1
     ui.heading("Done" if connector_ok else "Almost done")
     ui.say("To chat about your JASP work:")
-    ui.say("  1. Open JASP." + ("" if switched else " (Its connection for AI apps is still off: "
-                                 "Full Fat offers to fix that when you start a chat.)"))
-    ui.say(f'  2. Double-click "{launcher.NAME}" on your Desktop.' if launchers else
-           "  2. Run: full-fat launch")
-    first_run_notes(keys, ui)
+    if launchers:
+        ui.say(f'  Double-click "{launcher.NAME}" {icon_place}.')
+    else:
+        ui.say("  Open a new Terminal window and type: full-fat launch")
+        ui.say(f"  (or, in this window: {keep(launcher.shell_command(launcher.full_fat_command() + ['launch']))})")
+    ui.say("  Full Fat opens JASP for you. If JASP is already open, it may ask you to close it first, so save your "
+           "work in JASP before you start.")
+    first_run_notes(list(exes), ui)
     if not connector_ok:
         return 1
-    if not ui.yes and not a.no_start and exes and ui.yes_no("Start a chat now?", True):
-        a.app = keys[0] if len(keys) == 1 else None
+    if not ui.yes and not a.no_start and ui.yes_no("Start a chat now?", True, on_eof=False):
+        a.app = next(iter(exes)) if len(exes) == 1 else None
         return cmd_launch(a, ui)
     return 0
 
@@ -279,7 +283,8 @@ def first_run_notes(keys: list[str], ui: UI) -> None:
     ui.say("The first time you start a chat:")
     if "claude" in keys:
         ui.say("  - Claude shows a few welcome screens (for example a choice of colours). Press Enter on each.")
-        ui.say("  - Claude asks whether you trust the chat folder. Press Enter to say yes.")
+        ui.say('  - Claude asks whether you trust the chat folder. Press the Down arrow once, so that "Yes, I trust '
+               'this folder" is picked, then press Enter. (Enter alone picks "No, exit".)')
     if "codex" in keys:
         ui.say("  - Codex may show a welcome screen or ask about the folder. Choose the first option and press Enter.")
     if sys.platform == "darwin":
@@ -293,40 +298,58 @@ def _workspace_from(a, st: dict) -> Path:
     return Path(a.dir or st.get("dir") or state.default_workspace()).expanduser().absolute()
 
 
-def wait_for_jasp(j: jasp.Jasp, host: str, port: int, ui: UI, is_running=None, ping=None,
-                  start_wait: float = 90) -> bool:
-    """Make sure JASP is open and answers. Opens JASP, offers to fix the setting, retries."""
-    is_running = is_running or jasp.running
-    ping = ping or jasp.ping
-    opened = False
-    while True:
-        if ping(host, port):
+def connect(j: jasp.Jasp, host: str, port: int, ui: UI, is_running=None, ping=None,
+            start_wait: float = 120) -> bool:
+    """Make sure JASP is open and answers. Its connection is switched on only while Full Fat opens JASP, and
+    is off again on disk however this ends (see link.py)."""
+    store = j.write_store()
+    try:
+        return _connect(j, store, host, port, ui, is_running or jasp.running, ping or jasp.ping, start_wait)
+    finally:
+        if store is not None:
+            try:
+                link.switch_off(store)
+            except OSError as e:
+                ui.problem(f"Full Fat could not switch JASP's connection off again ({e}). Run full-fat setup to "
+                           "try again.")
+
+
+def _connect(j, store, host, port, ui: UI, is_running, ping, start_wait) -> bool:
+    if ping(host, port):
+        return True
+    if store is None:
+        ui.problem("Full Fat could not find JASP's settings, so it cannot connect to JASP.")
+        ui.say("  Open and close JASP once, then run Full Fat setup again.")
+        return False
+    if is_running():
+        if store.enabled() and waiting(ui, "JASP is open. Waiting for it to answer... If JASP shows a question "
+                                       "(for example about checking for updates), answer it first.",
+                                       lambda: ping(host, port), timeout=30):
             return True
-        if not is_running():
-            if not opened and jasp.open_jasp(j):
-                opened = True
-                if waiting(ui, "Opening JASP for you. This can take a minute. If JASP asks a question (for "
-                           "example about checking for updates), answer it: JASP connects after that.",
-                           lambda: ping(host, port), timeout=start_wait):
-                    return True
-                continue
-            if not ui.enter("JASP is not open. Open JASP first, then press Enter."):
-                return False
-            continue
-        if j.found and j.write_store() and not j.enabled():
-            ui.say("JASP is open, but its connection for AI apps is switched off.")
-            if not ui.yes_no("Switch it on now? JASP has to close for a moment.", True):
-                return False
-            if not switch_on(j, ui, is_running):
-                return False
-            opened = False
-            continue
-        if waiting(ui, "JASP is open. Waiting for it to answer... If JASP shows a question (for example about "
-                   "checking for updates), answer it first.", lambda: ping(host, port), timeout=30):
-            return True
-        if not ui.enter("JASP does not answer. If JASP shows a question, answer it. If you opened JASP before "
-                        "switching on its connection, close JASP and open it again. Then press Enter."):
+        ui.say("JASP is open, but it was started without its connection for chats, and JASP only switches that "
+               "on when it starts.")
+        ui.say(f"  Save your work, then close JASP ({quit_hint()}). Full Fat then opens JASP again for you.")
+        if ui.yes:
             return False
+        waiting(ui, "  Waiting for JASP to close...", lambda: not is_running())
+        time.sleep(2)  # let JASP finish quitting
+    if not link.switch_on(store):
+        ui.problem("Full Fat changed the setting, but JASP's settings still say it is off.")
+        for n in j.notes:
+            ui.say("  " + n)
+        return False
+    if jasp.open_jasp(j):
+        msg = ("Opening JASP for you. This can take a minute. If JASP asks a question (for example about "
+               "checking for updates), answer it: JASP connects after that.")
+    else:
+        msg = "Open JASP now. Full Fat waits until it answers."
+    while True:
+        if waiting(ui, msg, lambda: ping(host, port), timeout=start_wait):
+            return True
+        if ui.yes or not ui.enter("JASP has not answered yet. If JASP shows a question, answer it. Then press "
+                                  "Enter to keep waiting (or Ctrl+C to stop)."):
+            return False
+        msg = "Waiting for JASP to answer..."
 
 
 def cmd_launch(a, ui: UI) -> int:
@@ -342,7 +365,7 @@ def cmd_launch(a, ui: UI) -> int:
         n = ui.choose("Chat with which?", ["Claude", "ChatGPT"], 1)
         keys = [keys[n - 1]]
     app = apps.APPS[keys[0]]
-    exe = ensure_app(app, ui, may_install=True, may_sign_in=False)
+    exe = ensure_app(app, ui, may_install=True, may_sign_in=False, agreed=getattr(a, "install_apps", False))
     if not exe:
         return 1
     if apps.signed_in(app, exe) is False and not sign_in(app, exe, ui):
@@ -351,15 +374,43 @@ def cmd_launch(a, ui: UI) -> int:
     m = workspace.read_manifest(folder)
     host = m.get("host") or j.host_port()[0]
     port = int(m.get("port") or j.host_port()[1])
-    if not wait_for_jasp(j, host, port, ui):
+    if not connect(j, host, port, ui, start_wait=getattr(a, "wait", None) or 120):
         return 1
     ui.ok("JASP is open and connected. Starting the chat...")
-    cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE)
+    cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder)
     os.chdir(folder)
     if os.name == "nt":
         return subprocess.run(cmd).returncode
+    real_terminal_input()
     os.execv(exe, cmd)
     return 0  # not reached
+
+
+def real_terminal_input() -> None:
+    """Give the chat app the terminal itself as its input, not /dev/tty.
+
+    The install line runs setup with input from /dev/tty, and "Start a chat now?" then starts the chat app with
+    that input. On macOS, programs that watch their input with kqueue cannot use /dev/tty (it fails with
+    EINVAL), so the input is reopened as the terminal's own device (for example /dev/ttys003), found from the
+    output, which is the same terminal."""
+    try:
+        if os.ttyname(0) != "/dev/tty":
+            return
+    except OSError:
+        return
+    for fd in (1, 2):
+        try:
+            name = os.ttyname(fd)
+        except OSError:
+            continue
+        if name and name != "/dev/tty":
+            try:
+                new = os.open(name, os.O_RDWR | getattr(os, "O_NOCTTY", 0))
+            except OSError:
+                continue
+            os.dup2(new, 0)
+            os.close(new)
+            return
 
 
 # ---------------------------------------------------------------------------- doctor
@@ -383,24 +434,29 @@ def cmd_doctor(a, ui: UI) -> int:
         if ok is False:
             bad(f"JASP {j.version} is too old.", f"install the newest JASP from {jasp.DOWNLOAD_URL}")
         else:
-            ui.ok(f"JASP {j.version or '(version unknown)'} found.")
+            ui.ok(f"JASP found (it reports version {j.version or 'unknown'}).")
         for n in j.notes:
             bad(n, "ask whoever manages this computer")
-        if j.enabled():
-            ui.ok("JASP's connection for AI apps is switched on.")
+        store = j.write_store()
+        if store is None:
+            bad("Full Fat could not find JASP's settings.", "open and close JASP once, then run full-fat setup")
+        elif link.left_on(store):
+            bad("JASP's connection for chats was left switched on.",
+                "run full-fat setup, which switches it off (a chat started with the Full Fat icon still works)")
+        elif store.enabled():
+            ui.ok("JASP's connection for chats is switched on in JASP (it was on before Full Fat, so it stays on).")
         else:
-            bad("JASP's connection for AI apps is switched off.",
-                "close JASP and run full-fat setup, or double-click Full Fat and say yes when it offers")
+            ui.ok("JASP's connection for chats is off until Full Fat opens JASP for a chat.")
     m = workspace.read_manifest(folder)
     host = m.get("host") or j.host_port()[0]
     port = int(m.get("port") or j.host_port()[1])
     if jasp.ping(host, port):
         ui.ok("JASP is open and answers.")
     elif jasp.running():
-        bad("JASP is open but does not answer.",
-            "answer any question JASP shows (it connects after that), or close JASP and open it again")
+        ui.say("  JASP is open without its connection for chats. The Full Fat icon asks you to close it and "
+               "opens it again.")
     else:
-        ui.say("  JASP is not open (that is fine until you want to chat).")
+        ui.say("  JASP is not open (that is fine: the Full Fat icon opens it).")
     for k in st.get("apps") or ["claude"]:
         app = apps.APPS[k]
         exe = apps.find(app)
@@ -429,8 +485,7 @@ def cmd_doctor(a, ui: UI) -> int:
         if ok:
             ui.ok("The link between the chat and JASP starts.")
         else:
-            bad(f"The link between the chat and JASP does not start ({detail}).",
-                "check the internet connection and run full-fat setup again")
+            bad("The link between the chat and JASP does not start.", connector.explain(detail))
     for x in st.get("launchers", []):
         if not Path(x).exists():
             bad(f"The Full Fat icon {keep(x)} is gone.", "run full-fat setup again")
@@ -441,42 +496,72 @@ def cmd_doctor(a, ui: UI) -> int:
 
 # ---------------------------------------------------------------------------- uninstall
 
+def remove_chat_folder(folder: Path, ui: UI) -> None:
+    """Delete what Full Fat wrote into the chat folder (the files its manifest lists, unchanged), then the
+    folder if nothing else is left. Never a folder without Full Fat's manifest."""
+    if not folder.is_dir():
+        return
+    m = workspace.read_manifest(folder)
+    if not m:
+        ui.say(f"  {keep(folder)} was not made by Full Fat (it has no {workspace.MANIFEST}), so it was left alone.")
+        return
+    files = m.get("files") if isinstance(m.get("files"), dict) else {}
+    ours, changed = [], []
+    for rel, digest in files.items():
+        p = folder / rel
+        if p.is_file() and not p.is_symlink() and folder.resolve() in p.resolve().parents:
+            text = p.read_text(encoding="utf-8", errors="replace")
+            (ours if workspace.sha(text) == digest else changed).append(p)
+    listed = {folder / rel for rel in files} | {folder / workspace.MANIFEST}
+    other = 0
+    for root, dirs, names in os.walk(folder):
+        for n in names + [d for d in dirs if os.path.islink(os.path.join(root, d))]:
+            if Path(root, n) not in listed:
+                other += 1
+    other += len(changed)
+    if other:
+        ui.say(f"  The chat folder also has {other} other file(s), folder link(s) or changed file(s). They are kept.")
+    if not ui.yes_no(f"Delete the files Full Fat made in {keep(folder)}?", True, on_eof=False):
+        ui.say(f"  Kept {keep(folder)}")
+        return
+    for p in ours + [folder / workspace.MANIFEST]:
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    # then the folders Full Fat made for its files, deepest first, if they are empty now
+    made = {q for p in ours for q in p.parents if q == folder or folder in q.parents}
+    for d in sorted(made, key=lambda q: len(q.parts), reverse=True):
+        try:
+            if not d.is_symlink() and not any(d.iterdir()):
+                d.rmdir()
+        except OSError:
+            pass
+    if folder.exists():
+        ui.ok(f"Removed Full Fat's files. {keep(folder)} still has your own files, so it was kept.")
+    else:
+        ui.ok(f"Removed {keep(folder)}")
+
+
 def cmd_uninstall(a, ui: UI) -> int:
     st = state.load()
     folder = _workspace_from(a, st)
-    ui.say("This removes the Full Fat icon and the chat folder, and puts JASP's setting back as it was.")
-    if not ui.yes_no("Go ahead?", True):
+    ui.say("This removes the Full Fat icon and the files Full Fat made in the chat folder, and puts JASP's "
+           "setting back as it was.")
+    if not ui.yes_no("Go ahead?", True, on_eof=False):
         return 1
     for x in st.get("launchers", []):
         remove_launcher(x, ui)
-    if folder.is_dir():
-        m = workspace.read_manifest(folder)
-        ours = set((m.get("files") or {}).keys()) | {".mcp.json", ".claude/settings.json", workspace.MANIFEST}
-        extra = [q for q in folder.rglob("*") if q.is_file()
-                 and q.relative_to(folder).as_posix() not in ours]
-        note = f" It also has {len(extra)} file(s) you added." if extra else ""
-        if ui.yes_no(f"Delete the chat folder {folder}?{note}", not extra):
-            shutil.rmtree(folder)
-            ui.ok(f"Removed {keep(folder)}")
-        else:
-            ui.say(f"  Kept {keep(folder)}")
-    changes = st.get("jasp_changes", [])
+    remove_chat_folder(folder, ui)
+    changes = [c for c in st.get("jasp_changes", []) if isinstance(c, dict) and isinstance(c.get("store"), dict)]
+    for c in changes:
+        try:
+            link.restore(c)
+        except OSError as e:
+            ui.problem(f"Could not put JASP's setting back ({e}).")
+            return 1
     if changes:
-        if jasp.running():
-            if ui.yes:
-                ui.say("  JASP is open, so its setting was left on. Close JASP and run this again to undo it.")
-                return 1
-            ui.say("JASP is open. To put its setting back, JASP has to be closed.")
-            waiting(ui, "  Close JASP. Full Fat waits until it has closed...", lambda: not jasp.running())
-            time.sleep(2)
-        for c in changes:
-            s = jasp.Store.from_json(c["store"])
-            prev = c.get("previous")
-            if prev is None:
-                s.remove(jasp.KEY_ENABLED)
-            else:
-                s.set(jasp.KEY_ENABLED, str(prev).lower() in ("true", "1"))
-        ui.ok("JASP's connection for AI apps is back to how it was before Full Fat.")
+        ui.ok("JASP's connection for chats is back to how it was before Full Fat.")
     trusted = st.get("codex_trust_added")
     if trusted:
         r = apps.untrust_codex_folder(trusted)
@@ -501,7 +586,8 @@ def parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--dir", help="chat folder (default: '~/Full Fat', or the one used last time)")
     common.add_argument("--yes", "-y", action="store_true",
-                        help="don't ask anything: take the defaults, never wait (for scripts and CI)")
+                        help="don't ask anything: take the defaults, never wait, never install the chat apps "
+                             "(for scripts and CI)")
     common.add_argument("--settings-file", help=argparse.SUPPRESS)  # a stand-in JASP settings file (tests, CI)
     common.add_argument("--jasp-version", help="use this JASP version instead of the one found")
 
@@ -514,14 +600,19 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--careful", action=argparse.BooleanOptionalAction, default=None,
                    help="ask before every change to JASP; reading JASP still runs without asking")
     s.add_argument("--no-install-apps", action="store_true", help="don't install Claude Code or Codex")
+    s.add_argument("--install-apps", action="store_true",
+                   help="install Claude Code or Codex without asking, also with --yes (for CI)")
     s.add_argument("--no-sign-in", action="store_true", help="don't check or start the sign-in")
     s.add_argument("--no-launcher", action="store_true", help="don't make the Full Fat icon")
     s.add_argument("--no-trust", action="store_true", help="don't mark the folder as trusted in Codex")
     s.add_argument("--no-start", action="store_true", help="don't offer to start a chat at the end")
     l = sub.add_parser("launch", parents=[common], help="check JASP, then start the chat (the Full Fat icon runs this)")
     l.add_argument("--app", choices=["claude", "codex"], help="which chat app to start")
+    l.add_argument("--install-apps", action="store_true", help=argparse.SUPPRESS)
+    l.add_argument("--wait", type=float, help=argparse.SUPPRESS)  # seconds to wait for JASP to answer (CI)
     sub.add_parser("doctor", parents=[common], help="check everything and say how to fix problems")
-    sub.add_parser("uninstall", parents=[common], help="remove the icon and chat folder, put JASP's setting back")
+    sub.add_parser("uninstall", parents=[common],
+                   help="remove the icon and Full Fat's files in the chat folder, put JASP's setting back")
     return p
 
 

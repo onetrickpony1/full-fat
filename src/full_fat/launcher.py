@@ -63,6 +63,13 @@ def _sh_quote(s: str) -> str:
     return "'" + s.replace("'", "'\\''") + "'"
 
 
+def shell_command(cmd: list[str]) -> str:
+    """A command to paste into this computer's terminal (PowerShell on Windows, the usual shell elsewhere)."""
+    if os.name == "nt":
+        return "& " + " ".join("'" + c.replace("'", "''") + "'" for c in cmd)
+    return " ".join(c if c and all(ch.isalnum() or ch in "/._-=" for ch in c) else _sh_quote(c) for c in cmd)
+
+
 def mac_script(cmd: list[str], folder: Path) -> str:
     args = " ".join(_sh_quote(c) for c in cmd + ["launch", "--dir", str(folder)])
     return ("#!/bin/sh\n"

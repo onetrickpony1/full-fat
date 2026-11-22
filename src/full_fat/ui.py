@@ -42,14 +42,16 @@ class UI:
         except EOFError:
             return None
 
-    def yes_no(self, question: str, default: bool = True) -> bool:
+    def yes_no(self, question: str, default: bool = True, on_eof: bool | None = None) -> bool:
+        """on_eof: the answer when nobody can type one (input closed). Default: the same as Enter.
+        Questions that delete or install something pass False, so they need a real yes."""
         if self.yes:
             return default
         hint = "[Y/n]" if default else "[y/N]"
         while True:
             ans = self._ask(f"{question} {hint} ")
             if ans is None:
-                return default
+                return default if on_eof is None else on_eof
             ans = ans.strip().lower()
             if not ans:
                 return default
