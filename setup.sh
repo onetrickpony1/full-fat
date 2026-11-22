@@ -82,5 +82,6 @@ cat "$HERE/templates/annotate-head.md" "$DIR/jasp/annotate-prompt.md" > "$DIR/.c
 echo "Persona: $PERSONA"
 echo "Done. Open JASP, then in a terminal:"
 echo "  cd \"$DIR\" && claude     (Claude subscription: Opus, high effort)"
-echo "  cd \"$DIR\" && codex      (ChatGPT subscription: GPT-6.2 Astra, high effort; trust the folder when asked)"
+echo "Both apps may ask once whether you trust this folder: say yes, or they ignore its settings."
+echo "  cd \"$DIR\" && codex      (ChatGPT subscription: GPT-6.2 Astra, high effort)"
 echo "Change model or effort inside the app: /model and /effort in Claude Code, /model in Codex."
