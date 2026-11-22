@@ -292,8 +292,9 @@ def wait_for_jasp(j: jasp.Jasp, host: str, port: int, ui: UI, is_running=None, p
         if not is_running():
             if not opened and jasp.open_jasp(j):
                 opened = True
-                if waiting(ui, "Opening JASP for you. This can take a minute...", lambda: ping(host, port),
-                           timeout=start_wait):
+                if waiting(ui, "Opening JASP for you. This can take a minute. If JASP asks a question (for "
+                           "example about checking for updates), answer it: JASP connects after that.",
+                           lambda: ping(host, port), timeout=start_wait):
                     return True
                 continue
             if not ui.enter("JASP is not open. Open JASP first, then press Enter."):
@@ -307,10 +308,11 @@ def wait_for_jasp(j: jasp.Jasp, host: str, port: int, ui: UI, is_running=None, p
                 return False
             opened = False
             continue
-        if waiting(ui, "JASP is open. Waiting for it to answer...", lambda: ping(host, port), timeout=30):
+        if waiting(ui, "JASP is open. Waiting for it to answer... If JASP shows a question (for example about "
+                   "checking for updates), answer it first.", lambda: ping(host, port), timeout=30):
             return True
-        if not ui.enter("JASP does not answer. If you opened it before switching on its connection, close "
-                        "JASP and open it again. Then press Enter."):
+        if not ui.enter("JASP does not answer. If JASP shows a question, answer it. If you opened JASP before "
+                        "switching on its connection, close JASP and open it again. Then press Enter."):
             return False
 
 
@@ -382,7 +384,8 @@ def cmd_doctor(a, ui: UI) -> int:
     if jasp.ping(host, port):
         ui.ok("JASP is open and answers.")
     elif jasp.running():
-        bad("JASP is open but does not answer.", "close JASP and open it again")
+        bad("JASP is open but does not answer.",
+            "answer any question JASP shows (it connects after that), or close JASP and open it again")
     else:
         ui.say("  JASP is not open (that is fine until you want to chat).")
     for k in st.get("apps") or ["claude"]:

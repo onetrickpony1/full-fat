@@ -109,7 +109,11 @@ jobs:
           grep -c 'JASP-Stats\|Application Support/JASP' "$HOME/JASP-AI/.claude/settings.json" || true
           cat "$HOME/JASP-AI/.claude/settings.json"
       - name: Open JASP
-        run: open -a /Applications/JASP.app
+        run: |
+          # JASP's first start asks "Check for updates?" in a dialog that blocks before its connection starts
+          # (Desktop/mainwindow.cpp v0.99.0 lines 197, 216, 224-244). A person answers it; CI pre-answers it.
+          defaults write org.jasp-stats.JASP checkUpdatesAskUser -bool false
+          open -a /Applications/JASP.app
       - name: Talk to JASP through jasp-mcp
         run: python tests/e2e_check_jasp.py "$HOME/JASP-AI" --wait 900
       - name: full-fat doctor
@@ -158,6 +162,9 @@ jobs:
       - name: Open JASP
         shell: pwsh
         run: |
+          # pre-answer JASP's first-start "Check for updates?" dialog, which blocks its connection
+          Add-Content -Path "$env:APPDATA\JASP\JASP.ini" -Value "checkUpdatesAskUser=false"
+          Get-Content "$env:APPDATA\JASP\JASP.ini"
           $exe = Get-ChildItem -Recurse "$env:RUNNER_TEMP\JASP" -Filter JASPDesktop.exe | Select-Object -First 1 -ExpandProperty FullName
           Start-Process $exe
       - name: Talk to JASP through jasp-mcp

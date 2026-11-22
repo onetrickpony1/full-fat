@@ -48,6 +48,10 @@ Use `git show <tag>:<path>` in a jasp-desktop clone. `jasp.py` and `prompts.py` 
 - Prompts: `settings.cpp` entries `aiCommonSystemPrompt` and `aiAnnotationPrompt`; personas in
   `Resources/defaultPersonas.json`; JASP builds its system message in `Desktop/ai/aiBridge.cpp` (v0.98.1 569-590)
   and opens the chat with the hidden message "Give a short introduction." (line 312).
+- The server starts at the end of the main window's constructor (`Desktop/mainwindow.cpp` v0.99.0 line 216), after
+  `checkForUpdates()` (224-244), which on first start shows a blocking "Check for updates" dialog
+  (`checkUpdatesAskUser`, default true). Until the user answers, JASP does not answer on its port. Full Fat tells the
+  user; it does not change that setting. CI pre-answers it (found by `e2e-macos` on 2026-11-22).
 - Windows program `JASPDesktop.exe` (`Desktop/CMakeLists.txt` v0.99.0 line 103); MSIX package names in
   `Tools/windows/msix/AppxManifest-*.xml.in`; macOS `Tools/macOS/Info.plist.in` (CFBundleVersion is the full version,
   CFBundleShortVersionString only major.minor).

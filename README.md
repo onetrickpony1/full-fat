@@ -105,7 +105,8 @@ Running the same line again updates Full Fat and runs the setup again.
 1. **Install.** Follow the steps under Install for your computer, and answer the questions.
 2. **Sign in.** When it says so, a browser window opens. Sign in with your Claude or ChatGPT account (the one
    you pay for), allow access, and go back to the window with text.
-3. **Chat.** Double-click "Talk to JASP" on your Desktop. The first time, press Enter on Claude's welcome
+3. **Chat.** Open JASP (the first time it asks about checking for updates: answer it). Double-click "Talk to
+   JASP" on your Desktop. The first time, press Enter on Claude's welcome
    screens and say yes when it asks whether you trust the folder. Then type your questions, for example "What
    analysis fits my data?" or "Explain the t-test results".
 
@@ -140,6 +141,8 @@ and `/effort` change the model and effort. In Codex, `/model` does both.
 - **JASP versions.** JASP 0.98.0 was the first with the connection for AI apps and the AI prompts. Older versions
   are refused with a link to the download page. A version with no release tag (a nightly) uses the newest
   instructions from JASP's development branch.
+- **JASP's first start** asks whether it should check for updates. Answer it: JASP only connects to the chat
+  after that. Talk to JASP reminds you.
 - **What changes in JASP.** Only one setting: `rpcServerEnabled`, the "Enable MCP server" box under
   Preferences > AI > MCP. JASP reads it when it starts, so it has to restart once. A backup of JASP's settings
   is kept in Full Fat's own folder, and `full-fat uninstall` puts the old value back.
