@@ -12,7 +12,7 @@ import urllib.error
 from pathlib import Path
 
 from . import __version__, apps, connector, jasp, launcher, prompts, state, workspace
-from .ui import UI, waiting
+from .ui import UI, keep, waiting
 
 GITHUB = "https://github.com/onetrickpony1/full-fat"
 
@@ -86,7 +86,7 @@ def switch_on(j: jasp.Jasp, ui: UI, is_running=None) -> bool:
         ui.problem("Full Fat changed the setting but JASP's settings still say it is off.")
         ui.say('  In JASP, open Preferences > AI > MCP and tick "Enable MCP server", then restart JASP.')
         return False
-    where = f" A copy of the old settings is in {backup}." if backup else ""
+    where = f" A copy of the old settings is in {keep(backup)}." if backup else ""
     ui.ok("Switched on JASP's connection for AI apps." + where)
     return True
 
@@ -117,7 +117,7 @@ def ensure_app(app: apps.App, ui: UI, may_install: bool, may_sign_in: bool) -> s
         ui.say(f"Installing {app.product} with {provider}'s own installer...")
         if not apps.install(app):
             ui.problem(f"{app.product} could not be installed.")
-            ui.say(f"  Install it by hand: {app.install_windows if os.name == 'nt' else app.install_posix}")
+            ui.say(f"  Install it by hand: {keep(app.install_windows if os.name == 'nt' else app.install_posix)}")
             return None
         exe = apps.find(app)
     ui.ok(f"{app.product} is installed.")
@@ -127,7 +127,7 @@ def ensure_app(app: apps.App, ui: UI, may_install: bool, may_sign_in: bool) -> s
     if s:
         ui.ok(f"You are signed in to {app.product}.")
     elif ui.yes:
-        ui.say(f"  You are not signed in to {app.product} yet. Talk to JASP asks you to when you start it.")
+        ui.say(f"  You are not signed in to {app.product} yet. Full Fat asks you to when you start a chat.")
     else:
         sign_in(app, exe, ui)
     return exe
@@ -142,7 +142,7 @@ def sign_in(app: apps.App, exe: str, ui: UI) -> bool:
     if done:
         ui.ok(f"Signed in to {app.product}.")
     else:
-        ui.problem(f"Not signed in to {app.product} yet. You can do it later: Talk to JASP asks again.")
+        ui.problem(f"Not signed in to {app.product} yet. You can do it later: Full Fat asks again when you start a chat.")
     return done
 
 
@@ -160,6 +160,17 @@ def warm_connector(folder: Path, ui: UI) -> bool:
         ui.problem("The part that lets the chat use JASP could not be prepared.")
         ui.say("  Check the internet connection, then run Full Fat again." + (f" (Details: {detail})" if detail else ""))
     return ok
+
+
+def remove_launcher(recorded: str, ui: UI) -> bool:
+    """Remove an icon that Full Fat's state records. False means it is still there to remove another time."""
+    try:
+        if launcher.remove(Path(recorded)):
+            ui.ok(f"Removed {keep(recorded)}")
+    except OSError as e:
+        ui.problem(f"Could not remove {keep(recorded)}: {e}")
+        return False
+    return True
 
 
 def pick_persona(wanted: str | None, p: prompts.Prompts, ui: UI) -> str:
@@ -197,7 +208,7 @@ def cmd_setup(a, ui: UI) -> int:
 
     ui.heading("Chat folder")
     if workspace.find_uvx() == "uvx" and not shutil.which("uvx"):
-        ui.problem("uv is missing (the chat app needs it to talk to JASP).")
+        ui.problem("uv is missing (the chat app needs it to reach JASP).")
         ui.say(f"  Run the Full Fat install line again: {GITHUB}#install")
     try:
         p = prompts.load_prompts(j.version)
@@ -208,12 +219,12 @@ def cmd_setup(a, ui: UI) -> int:
     persona = pick_persona(a.persona or st.get("persona"), p, ui)
     host, port = j.host_port()
     res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs)
-    ui.ok(f"Chat folder ready: {folder} (JASP instructions from {p.ref}, persona {persona}"
+    ui.ok(f"Chat folder ready: {keep(folder)} (JASP instructions from {p.ref}, persona {persona}"
           f"{', careful mode' if careful else ''}).")
     for n in p.notes:
         ui.say("  " + n)
     for old in res.kept_old:
-        ui.say(f"  You had changed a file Full Fat updates, so your copy is kept as {old}")
+        ui.say(f"  You had changed a file Full Fat updates, so your copy is kept as {keep(old)}")
     connector_ok = warm_connector(folder, ui)
 
     if "codex" in keys and not a.no_trust:
@@ -236,13 +247,15 @@ def cmd_setup(a, ui: UI) -> int:
             try:
                 launchers = [str(x) for x in launcher.create(folder, desktop=Path.home())]
                 ui.say(f"  Full Fat could not put the icon on the Desktop, so it is in your home folder: "
-                       f"{launchers[0] if launchers else Path.home()}")
+                       f"{keep(launchers[0] if launchers else Path.home())}")
             except OSError as e:
-                ui.problem(f"Full Fat could not make the Talk to JASP icon ({e}). Use: full-fat launch")
+                ui.problem(f"Full Fat could not make the Full Fat icon ({e}). Use: full-fat launch")
         for x in launchers:
-            ui.ok(f'"{launcher.NAME}" icon: {x}')
+            ui.ok(f'"{launcher.NAME}" icon: {keep(x)}')
 
     old_launchers = [x for x in st.get("launchers", []) if x not in launchers]
+    if launchers:  # new icons were written, so they replace the ones recorded earlier
+        old_launchers = [x for x in old_launchers if not remove_launcher(x, ui)]
     state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful,
                 "launchers": launchers + old_launchers, "settings_file": a.settings_file,
                 "jasp_version": j.version})
@@ -250,7 +263,7 @@ def cmd_setup(a, ui: UI) -> int:
     ui.heading("Done" if connector_ok else "Almost done")
     ui.say("To chat about your JASP work:")
     ui.say("  1. Open JASP." + ("" if switched else " (Its connection for AI apps is still off: "
-                                 "Talk to JASP offers to fix that.)"))
+                                 "Full Fat offers to fix that when you start a chat.)"))
     ui.say(f'  2. Double-click "{launcher.NAME}" on your Desktop.' if launchers else
            "  2. Run: full-fat launch")
     first_run_notes(keys, ui)
@@ -321,7 +334,7 @@ def cmd_launch(a, ui: UI) -> int:
     folder = _workspace_from(a, st)
     missing = workspace.missing_files(folder)
     if missing:
-        ui.problem(f"The chat folder {folder} is missing or incomplete.")
+        ui.problem(f"The chat folder {keep(folder)} is missing or incomplete.")
         ui.say("  Run Full Fat setup again (run the install line again, or: full-fat setup).")
         return 1
     keys = [a.app] if getattr(a, "app", None) in apps.APPS else list(st.get("apps") or ["claude"])
@@ -377,7 +390,7 @@ def cmd_doctor(a, ui: UI) -> int:
             ui.ok("JASP's connection for AI apps is switched on.")
         else:
             bad("JASP's connection for AI apps is switched off.",
-                "close JASP and run full-fat setup, or double-click Talk to JASP and say yes when it offers")
+                "close JASP and run full-fat setup, or double-click Full Fat and say yes when it offers")
     m = workspace.read_manifest(folder)
     host = m.get("host") or j.host_port()[0]
     port = int(m.get("port") or j.host_port()[1])
@@ -398,12 +411,12 @@ def cmd_doctor(a, ui: UI) -> int:
         if apps.signed_in(app, exe):
             ui.ok(f"Signed in to {app.product}.")
         else:
-            bad(f"Not signed in to {app.product}.", "run full-fat setup again, or double-click Talk to JASP")
+            bad(f"Not signed in to {app.product}.", "run full-fat setup again, or double-click Full Fat")
     missing = workspace.missing_files(folder)
     if missing:
-        bad(f"The chat folder {folder} is missing {', '.join(missing)}.", "run full-fat setup again")
+        bad(f"The chat folder {keep(folder)} is missing {', '.join(missing)}.", "run full-fat setup again")
     else:
-        ui.ok(f"Chat folder {folder} is complete.")
+        ui.ok(f"Chat folder {keep(folder)} is complete.")
     if not shutil.which("uvx") and workspace.find_uvx() == "uvx":
         bad("uv is missing, so the chat app cannot reach JASP.", f"run the Full Fat install line again ({GITHUB})")
     elif not missing:
@@ -420,7 +433,7 @@ def cmd_doctor(a, ui: UI) -> int:
                 "check the internet connection and run full-fat setup again")
     for x in st.get("launchers", []):
         if not Path(x).exists():
-            bad(f"The Talk to JASP icon {x} is gone.", "run full-fat setup again")
+            bad(f"The Full Fat icon {keep(x)} is gone.", "run full-fat setup again")
     ui.say("")
     ui.say("Everything looks fine." if not problems else f"{problems} problem(s) found.")
     return 1 if problems else 0
@@ -431,17 +444,11 @@ def cmd_doctor(a, ui: UI) -> int:
 def cmd_uninstall(a, ui: UI) -> int:
     st = state.load()
     folder = _workspace_from(a, st)
-    ui.say("This removes the Talk to JASP icon and the chat folder, and puts JASP's setting back as it was.")
+    ui.say("This removes the Full Fat icon and the chat folder, and puts JASP's setting back as it was.")
     if not ui.yes_no("Go ahead?", True):
         return 1
     for x in st.get("launchers", []):
-        p = Path(x)
-        try:
-            if p.is_file() and launcher.NAME in p.read_text(encoding="utf-8", errors="replace"):
-                p.unlink()
-                ui.ok(f"Removed {p}")
-        except OSError as e:
-            ui.problem(f"Could not remove {p}: {e}")
+        remove_launcher(x, ui)
     if folder.is_dir():
         m = workspace.read_manifest(folder)
         ours = set((m.get("files") or {}).keys()) | {".mcp.json", ".claude/settings.json", workspace.MANIFEST}
@@ -450,9 +457,9 @@ def cmd_uninstall(a, ui: UI) -> int:
         note = f" It also has {len(extra)} file(s) you added." if extra else ""
         if ui.yes_no(f"Delete the chat folder {folder}?{note}", not extra):
             shutil.rmtree(folder)
-            ui.ok(f"Removed {folder}")
+            ui.ok(f"Removed {keep(folder)}")
         else:
-            ui.say(f"  Kept {folder}")
+            ui.say(f"  Kept {keep(folder)}")
     changes = st.get("jasp_changes", [])
     if changes:
         if jasp.running():
@@ -476,14 +483,14 @@ def cmd_uninstall(a, ui: UI) -> int:
         if r == "removed":
             ui.ok("Removed the trust entry Full Fat had added for Codex.")
         elif r == "left":
-            ui.say(f"  Codex's trust entry for {trusted} was left in {apps.codex_home() / 'config.toml'}.")
+            ui.say(f"  Codex's trust entry for {keep(trusted)} was left in {keep(apps.codex_home() / 'config.toml')}.")
         backup = apps.codex_home() / "config.toml.before-full-fat"
         if backup.exists():
-            ui.say(f"  Codex's settings from before Full Fat are kept in {backup}")
+            ui.say(f"  Codex's settings from before Full Fat are kept in {keep(backup)}")
     sf = state.state_file()
     if sf.exists():
         sf.unlink()
-    ui.say(f"Backups of JASP's settings are kept in {state.backup_dir()}")
+    ui.say(f"Backups of JASP's settings are kept in {keep(state.backup_dir())}")
     ui.say("To remove Full Fat itself: uv tool uninstall full-fat")
     return 0
 
@@ -492,7 +499,7 @@ def cmd_uninstall(a, ui: UI) -> int:
 
 def parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--dir", help="chat folder (default: ~/JASP-AI, or the one used last time)")
+    common.add_argument("--dir", help="chat folder (default: '~/Full Fat', or the one used last time)")
     common.add_argument("--yes", "-y", action="store_true",
                         help="don't ask anything: take the defaults, never wait (for scripts and CI)")
     common.add_argument("--settings-file", help=argparse.SUPPRESS)  # a stand-in JASP settings file (tests, CI)
@@ -508,10 +515,10 @@ def parser() -> argparse.ArgumentParser:
                    help="ask before every change to JASP; reading JASP still runs without asking")
     s.add_argument("--no-install-apps", action="store_true", help="don't install Claude Code or Codex")
     s.add_argument("--no-sign-in", action="store_true", help="don't check or start the sign-in")
-    s.add_argument("--no-launcher", action="store_true", help="don't make the Talk to JASP icon")
+    s.add_argument("--no-launcher", action="store_true", help="don't make the Full Fat icon")
     s.add_argument("--no-trust", action="store_true", help="don't mark the folder as trusted in Codex")
     s.add_argument("--no-start", action="store_true", help="don't offer to start a chat at the end")
-    l = sub.add_parser("launch", parents=[common], help="check JASP, then start the chat (Talk to JASP runs this)")
+    l = sub.add_parser("launch", parents=[common], help="check JASP, then start the chat (the Full Fat icon runs this)")
     l.add_argument("--app", choices=["claude", "codex"], help="which chat app to start")
     sub.add_parser("doctor", parents=[common], help="check everything and say how to fix problems")
     sub.add_parser("uninstall", parents=[common], help="remove the icon and chat folder, put JASP's setting back")

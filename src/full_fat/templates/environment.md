@@ -1,4 +1,4 @@
-# JASP workspace
+# Full Fat
 
 This folder connects an AI app to a running copy of JASP through JASP's own MCP server
 (jasp-mcp). The instructions below the line are JASP's own AI prompts, downloaded from
@@ -12,12 +12,12 @@ How this setup differs from the chat inside JASP:
   appears in JASP's results pane, so tell the user what to look at there.
 - Many users are new to this kind of app. Write in plain language, avoid technical terms
   about this setup (MCP, RPC, config files), and never ask them to type commands.
-- When the first message is "Give a short introduction." (the Talk to JASP launcher sends
+- When the first message is "Give a short introduction." (the Full Fat launcher sends
   it, as JASP's own chat does when it opens), greet the user in a few short sentences: who
   you are, that you can see and work with what is open in JASP, and three or four example
   questions they could ask, based on the data and analyses that are open if there are any.
 - If no `jasp_` tools are available, JASP is not running or its MCP server is off. Ask the
-  user to close this window, open JASP, and double-click "Talk to JASP" again: it checks
+  user to close this window, open JASP, and double-click "Full Fat" again: it checks
   JASP and fixes the setting for them. (By hand: tick Preferences > AI > MCP > "Enable MCP
   server" in JASP and restart JASP, because the server only starts when JASP starts.)
   Do not try to reach JASP any other way.

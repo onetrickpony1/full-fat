@@ -1,10 +1,10 @@
-"""The "Talk to JASP" icon on the Desktop.
+"""The "Full Fat" icon on the Desktop.
 
-- macOS: "Talk to JASP.command", a shell script that Terminal opens on double-click. Full Fat writes it
+- macOS: "Full Fat.command", a shell script that Terminal opens on double-click. Full Fat writes it
   itself, so it has no quarantine flag (only files that browsers and similar apps download get one) and
   is made executable here, so Gatekeeper doesn't stop it.
-- Windows: "Talk to JASP.cmd", opened by Command Prompt.
-- Linux: "Talk to JASP.desktop" (Terminal=true) on the Desktop and in the applications menu.
+- Windows: "Full Fat.cmd", opened by Command Prompt.
+- Linux: "Full Fat.desktop" (Terminal=true) on the Desktop, full-fat.desktop in the applications menu.
 Each one runs `full-fat launch`, which checks JASP before starting the chat.
 """
 
@@ -17,7 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-NAME = "Talk to JASP"
+NAME = "Full Fat"
+MARKS = ("(made by Full Fat)", "(Full Fat)")  # one is in every launcher Full Fat writes
 
 
 def full_fat_command() -> list[str]:
@@ -65,16 +66,16 @@ def _sh_quote(s: str) -> str:
 def mac_script(cmd: list[str], folder: Path) -> str:
     args = " ".join(_sh_quote(c) for c in cmd + ["launch", "--dir", str(folder)])
     return ("#!/bin/sh\n"
-            "# Talk to JASP (made by Full Fat). Double-click to start a chat about what is open in JASP.\n"
+            "# Launcher (made by Full Fat). Double-click to start a chat about what is open in JASP.\n"
             f"exec {args}\n")
 
 
 def windows_script(cmd: list[str], folder: Path) -> str:
     args = " ".join(f'"{c}"' for c in cmd + ["launch", "--dir", str(folder)])
     return ("@echo off\r\n"
-            "rem Talk to JASP (made by Full Fat). Double-click to start a chat about what is open in JASP.\r\n"
+            "rem Launcher (made by Full Fat). Double-click to start a chat about what is open in JASP.\r\n"
             "chcp 65001 >nul\r\n"
-            "title Talk to JASP\r\n"
+            f"title {NAME}\r\n"
             f"{args}\r\n"
             "if errorlevel 1 pause\r\n")
 
@@ -98,6 +99,17 @@ def linux_entry(cmd: list[str], folder: Path) -> str:
             "Categories=Education;Science;\n")
 
 
+def remove(path: Path) -> bool:
+    """Delete a launcher. Only for paths recorded in Full Fat's state, and not if the contents were replaced."""
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if not any(m in text for m in MARKS):
+        return False
+    path.unlink()
+    return True
+
+
 def create(folder: Path, desktop: Path | None = None) -> list[Path]:
     """Write the launcher(s). Returns the files written."""
     desktop = desktop or desktop_dir()
@@ -118,7 +130,7 @@ def create(folder: Path, desktop: Path | None = None) -> list[Path]:
     else:
         text = linux_entry(cmd, folder)
         apps = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "applications"
-        for p in (desktop / f"{NAME}.desktop", apps / "talk-to-jasp.desktop"):
+        for p in (desktop / f"{NAME}.desktop", apps / "full-fat.desktop"):
             if p.parent == desktop and not desktop.is_dir():
                 continue
             p.parent.mkdir(parents=True, exist_ok=True)

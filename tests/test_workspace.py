@@ -128,7 +128,7 @@ def test_rerun_keeps_edited_text_file(tmp_path, p):
     (tmp_path / "AGENTS.md").write_text("my own rules\n")
     res = build(tmp_path, p)
     assert len(res.kept_old) == 1 and Path(res.kept_old[0]).read_text() == "my own rules\n"
-    assert (tmp_path / "AGENTS.md").read_text().startswith("# JASP workspace")
+    assert (tmp_path / "AGENTS.md").read_text().startswith("# Full Fat\n")
 
 
 def test_old_setup_sh_workspace_is_updated_without_backups(tmp_path, p):

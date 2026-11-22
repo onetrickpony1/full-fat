@@ -6,6 +6,13 @@ import sys
 import textwrap
 import time
 
+_KEEP = "\x00"
+
+
+def keep(value) -> str:
+    """Text that must stay on one line and intact, such as a path with a space in it."""
+    return str(value).replace(" ", _KEEP)
+
 
 class UI:
     def __init__(self, yes: bool = False, inp=input, out=None):
@@ -15,9 +22,9 @@ class UI:
 
     def say(self, text: str = "") -> None:
         for para in text.split("\n"):
-            self._out(textwrap.fill(para, 100, subsequent_indent="  " if para.startswith("  ") else "",
-                                    break_long_words=False, break_on_hyphens=False)
-                      if para else "")
+            line = textwrap.fill(para, 100, subsequent_indent="  " if para.startswith("  ") else "",
+                                 break_long_words=False, break_on_hyphens=False) if para else ""
+            self._out(line.replace(_KEEP, " "))
 
     def heading(self, text: str) -> None:
         self._out("")

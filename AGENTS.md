@@ -20,6 +20,10 @@ Project-specific rules. General repo rules are in the owner's conventions file.
   entry for that folder, the file parses and the new text parses too. Never touch other entries. Uninstall
   removes exactly the block Full Fat appended (state key `codex_trust_added`). Claude Code has no supported trust
   setting, so don't edit `~/.claude.json`.
+- **The chat folder's name has a space** (`Full Fat`). Quote it in every script and command, and wrap paths in
+  `ui.keep()` in messages, or the line wrapping splits them.
+- **Launchers are only removed or replaced if the state key `launchers` records them** and they still hold
+  Full Fat's mark (`launcher.MARKS`). Never look for launchers by name.
 - Plain English in every message a user sees. No "MCP", "RPC" or "config" in setup messages (README Notes and
   code comments may use them).
 
@@ -60,7 +64,7 @@ Researched from source but **not tried on a real machine**: everything Windows a
 under `%LOCALAPPDATA%\Packages\<family>\LocalCache`, the `org.jasp-stats.JASP` defaults domain, version detection).
 CI's `e2e-macos` and `e2e-windows` jobs are the only real check: they install the real JASP and talk to it.
 
-## Generated files (the user's chat folder, default ~/JASP-AI)
+## Generated files (the user's chat folder, default "~/Full Fat")
 
 - `AGENTS.md`: `templates/environment.md` + JASP's system prompt + "Persona Prompt:", "  Your name is: <name>" and
   the persona indented two spaces, exactly as `aiBridge.cpp` (v0.98.1 569-590) builds it.
@@ -88,10 +92,10 @@ CI's `e2e-macos` and `e2e-windows` jobs are the only real check: they install th
 - `cli.py`: the commands (setup, launch, doctor, uninstall) and every message. `ui.py`: questions, `--yes`.
 - `jasp.py`: detection per OS, the INI editor and the `Store` (INI file or macOS defaults domain), running and ping.
 - `prompts.py`: download and C++ string literal parsing. `workspace.py`: the chat folder. `apps.py`: Claude Code
-  and Codex. `launcher.py`: the Talk to JASP icon. `state.py`: Full Fat's own folder (answers, backups).
+  and Codex. `launcher.py`: the Full Fat icon. `state.py`: Full Fat's own folder (answers, backups).
 
 ## Tests
 
 `pip install -e ".[test]"`, then `pytest -q` (offline). `pytest -m network` fetches the real prompts for every
-0.98.x tag, 0.99.0 and development. `python tests/e2e_check_jasp.py ~/JASP-AI` checks a running JASP read-only.
+0.98.x tag, 0.99.0 and development. `python tests/e2e_check_jasp.py "$HOME/Full Fat"` checks a running JASP read-only.
 Default arguments must not capture `jasp.running` or `jasp.ping` at import time: tests monkeypatch them.

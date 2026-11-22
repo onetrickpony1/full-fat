@@ -47,4 +47,4 @@ def save(data: dict) -> None:
 
 
 def default_workspace() -> Path:
-    return Path.home() / "JASP-AI"
+    return Path.home() / "Full Fat"

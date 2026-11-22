@@ -11,7 +11,7 @@
   setting after making a backup.
 - **JASP's own instructions and personas**, downloaded for the JASP version you have (0.98.0 or newer;
   nightlies use the newest ones). `/annotate` in Claude Code writes an annotation into the JASP output.
-- **"Talk to JASP" icon on the Desktop.** It checks that JASP is open and answering, opens JASP or fixes the
+- **"Full Fat" icon on the Desktop.** It checks that JASP is open and answering, opens JASP or fixes the
   setting if not, then starts the chat with a greeting that says what you can ask.
 - **The same tools as JASP's own assistant, without asking.** Loading a data file asks first, and
   `--careful` asks before every change to JASP. Shell commands are off in the chat folder.
@@ -19,5 +19,6 @@
 - **`full-fat doctor` and `full-fat uninstall`.** Doctor checks every part and says how to fix it. Uninstall
   removes the icon and the chat folder (asking first), puts JASP's setting back and removes Codex's trust
   entry for the folder.
+- **The chat lives in a "Full Fat" folder in your home folder.** Use `--dir` to put it somewhere else.
 - **Safe to run again.** It updates the chat folder without deleting anything you added, and keeps your own
   version of any file it would replace.

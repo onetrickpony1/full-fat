@@ -60,7 +60,7 @@ DEFAULT_TOOLS = JASP_ASSISTANT_TOOLS + [t for t in READ_ONLY_TOOLS if t not in J
 BLOCKED_CLAUDE_TOOLS = ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit"]
 MANIFEST = ".full-fat.json"
 MARKERS = {  # how to recognise a file written by an older Full Fat (before .full-fat.json existed)
-    "AGENTS.md": "# JASP workspace",
+    "AGENTS.md": "# JASP workspace",  # setup.sh's heading: do not rename, it only matches those old files
     ".codex/config.toml": "# Full Fat",
     ".claude/commands/annotate.md": "description: Annotate a JASP analysis",
 }
@@ -169,7 +169,7 @@ def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
 
 def merge_claude_settings(old: dict, careful: bool, read_rules: list[str], model: str | None = "opus",
                           model_was_ours: bool = False) -> dict:
-    """model: what to set ("opus" for Max), or None to leave Claude Code's default (Pro).
+    """model: what to set, or None to leave Claude Code's default.
     model_was_ours: the current value was written by Full Fat, so it may be changed or removed."""
     new = json.loads(template("claude-settings.json"))
     out = dict(old)

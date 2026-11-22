@@ -10,7 +10,8 @@ Full Fat is a setup tool that runs on your own computer. It:
   only while JASP is closed and after making a backup;
 - downloads text from JASP's public source code on GitHub (the AI system prompt, the annotation prompt and the
   persona prompts in [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop));
-- writes configuration files for Claude Code and Codex CLI into a folder on your computer, and a launcher icon;
+- writes configuration files for Claude Code and Codex CLI into a folder on your computer (`~/Full Fat` unless
+  you choose another), and a "Full Fat" launcher icon;
 - adds a trust entry for that folder to Codex's settings (`~/.codex/config.toml`) when you set up Codex;
 - can run the official installers of Claude Code (Anthropic) and Codex CLI (OpenAI), and their sign-in commands,
   when you agree to it.

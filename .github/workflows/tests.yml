@@ -33,6 +33,11 @@ jobs:
       FULL_FAT_SOURCE: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
+      - name: Desktop and gio for the launcher check (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$HOME/Desktop"
+          command -v gio || { sudo apt-get update -q && sudo apt-get install -y -q libglib2.0-bin; }
       - name: install.sh
         if: runner.os != 'Windows'
         run: |
@@ -45,12 +50,26 @@ jobs:
           printf '[General]\naiEnabled=false\n' > "$RUNNER_TEMP/jasp/JASP.conf"
           FULL_FAT_SETUP_ARGS="--yes --settings-file $RUNNER_TEMP/jasp/JASP.conf --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in" sh install.sh
           grep -q '^rpcServerEnabled=true' "$RUNNER_TEMP/jasp/JASP.conf"
-          test -f "$HOME/JASP-AI/AGENTS.md"
-          test -f "$HOME/JASP-AI/.codex/config.toml"
-          ls -la "$HOME/Desktop" || true
-          if [ "$RUNNER_OS" = macOS ]; then test -x "$HOME/Desktop/Talk to JASP.command"; fi
+          test -f "$HOME/Full Fat/AGENTS.md"
+          test -f "$HOME/Full Fat/.codex/config.toml"
+          grep -F "[projects.'$HOME/Full Fat']" "$HOME/.codex/config.toml"
+          # the command the README gives for opening the folder by hand
+          bash -c 'cd "$HOME/Full Fat" && test -f .full-fat.json'
+          if command -v zsh >/dev/null; then zsh -c 'cd "$HOME/Full Fat" && test -f .full-fat.json'; fi
+          ls -la "$HOME/Desktop"
+          if [ "$RUNNER_OS" = macOS ]; then
+            icon="$HOME/Desktop/Full Fat.command"
+            test -x "$icon"
+            python3 tests/e2e_check_launcher.py "$icon" "$HOME/Full Fat" --fake-jasp
+          else
+            icon="$HOME/Desktop/Full Fat.desktop"
+            grep -qx 'Name=Full Fat' "$icon"
+            python3 tests/e2e_check_launcher.py "$icon" "$HOME/Full Fat" --fake-jasp --double-click
+          fi
           "$HOME/.local/bin/full-fat" doctor || true
           "$HOME/.local/bin/full-fat" uninstall --yes
+          if [ -e "$HOME/Full Fat" ] || [ -e "$icon" ]; then echo "uninstall left the folder or icon"; exit 1; fi
+          if grep -F "Full Fat']" "$HOME/.codex/config.toml"; then echo "trust entry not removed"; exit 1; fi
           if grep -q '^rpcServerEnabled' "$RUNNER_TEMP/jasp/JASP.conf"; then echo "setting not restored"; exit 1; fi
       - name: install.ps1
         if: runner.os == 'Windows'
@@ -64,14 +83,25 @@ jobs:
           powershell -ExecutionPolicy ByPass -File install.ps1
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if (-not (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet)) { exit 1 }
-          if (-not (Test-Path "$env:USERPROFILE\JASP-AI\AGENTS.md")) { exit 1 }
+          if (-not (Test-Path "$env:USERPROFILE\Full Fat\AGENTS.md")) { exit 1 }
           $desk = [Environment]::GetFolderPath("Desktop")
-          if (-not (Test-Path "$desk\Talk to JASP.cmd")) { exit 1 }
-          Get-Content "$desk\Talk to JASP.cmd"
+          if (-not (Test-Path "$desk\Full Fat.cmd")) { exit 1 }
+          Get-Content "$desk\Full Fat.cmd"
+          if (-not (Select-String -Path "$env:USERPROFILE\.codex\config.toml" -SimpleMatch "Full Fat']" -Quiet)) { exit 1 }
+          # the command the README gives for opening the folder by hand
+          foreach ($shell in "powershell", "pwsh") {
+            & $shell -NoProfile -Command 'cd "$HOME/Full Fat"; if (-not (Test-Path .full-fat.json)) { exit 1 }'
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          python tests/e2e_check_launcher.py "$desk\Full Fat.cmd" "$env:USERPROFILE\Full Fat" --fake-jasp
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           & "$env:USERPROFILE\.local\bin\full-fat.exe" doctor
           & "$env:USERPROFILE\.local\bin\full-fat.exe" uninstall --yes
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled' -Quiet) { exit 1 }
+          if (Test-Path "$env:USERPROFILE\Full Fat") { Write-Host "uninstall left the folder"; exit 1 }
+          if (Test-Path "$desk\Full Fat.cmd") { Write-Host "uninstall left the icon"; exit 1 }
+          if (Select-String -Path "$env:USERPROFILE\.codex\config.toml" -SimpleMatch "Full Fat']" -Quiet) { exit 1 }
 
   # The only real macOS check: install the real JASP, let Full Fat switch on its connection through
   # `defaults`, open JASP, and talk to it through jasp-mcp as the chat apps would.
@@ -106,16 +136,19 @@ jobs:
           full-fat setup --yes --app claude --no-install-apps --no-sign-in
           echo "rpcServerEnabled: $(defaults read org.jasp-stats.JASP rpcServerEnabled)"
           test "$(defaults read org.jasp-stats.JASP rpcServerEnabled)" = 1
-          grep -c 'JASP-Stats\|Application Support/JASP' "$HOME/JASP-AI/.claude/settings.json" || true
-          cat "$HOME/JASP-AI/.claude/settings.json"
+          grep -c 'JASP-Stats\|Application Support/JASP' "$HOME/Full Fat/.claude/settings.json" || true
+          cat "$HOME/Full Fat/.claude/settings.json"
       - name: Open JASP
         run: |
           # JASP's first start asks "Check for updates?" in a dialog that blocks before its connection starts
           # (Desktop/mainwindow.cpp v0.99.0 lines 197, 216, 224-244). A person answers it; CI pre-answers it.
           defaults write org.jasp-stats.JASP checkUpdatesAskUser -bool false
           open -a /Applications/JASP.app
-      - name: Talk to JASP through jasp-mcp
-        run: python tests/e2e_check_jasp.py "$HOME/JASP-AI" --wait 900
+      - name: Check JASP through jasp-mcp
+        run: python tests/e2e_check_jasp.py "$HOME/Full Fat" --wait 900
+      - name: Double-click the Full Fat icon
+        timeout-minutes: 8
+        run: python tests/e2e_check_launcher.py "$HOME/Desktop/Full Fat.command" "$HOME/Full Fat" --double-click
       - name: full-fat doctor
         if: always()
         run: full-fat doctor || true
@@ -157,7 +190,7 @@ jobs:
       - name: Full Fat setup
         shell: pwsh
         run: |
-          full-fat setup --yes --app claude --no-install-apps --no-sign-in --no-launcher --settings-file "$env:APPDATA\JASP\JASP.ini" --jasp-version $env:JASP_VERSION
+          full-fat setup --yes --app claude --no-install-apps --no-sign-in --settings-file "$env:APPDATA\JASP\JASP.ini" --jasp-version $env:JASP_VERSION
           Get-Content "$env:APPDATA\JASP\JASP.ini"
       - name: Open JASP
         shell: pwsh
@@ -167,9 +200,15 @@ jobs:
           Get-Content "$env:APPDATA\JASP\JASP.ini"
           $exe = Get-ChildItem -Recurse "$env:RUNNER_TEMP\JASP" -Filter JASPDesktop.exe | Select-Object -First 1 -ExpandProperty FullName
           Start-Process $exe
-      - name: Talk to JASP through jasp-mcp
-        run: python tests/e2e_check_jasp.py "$env:USERPROFILE\JASP-AI" --wait 900
+      - name: Check JASP through jasp-mcp
+        run: python tests/e2e_check_jasp.py "$env:USERPROFILE\Full Fat" --wait 900
         shell: pwsh
+      - name: Double-click the Full Fat icon
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          $desk = [Environment]::GetFolderPath("Desktop")
+          python tests/e2e_check_launcher.py "$desk\Full Fat.cmd" "$env:USERPROFILE\Full Fat" --double-click
       - name: Diagnostics
         if: always()
         shell: pwsh

@@ -10,16 +10,16 @@ trust_level = "trusted"
 
 
 def test_trust_appends_only():
-    new = apps.codex_trust_text(EXISTING, "/home/u/JASP-AI")
+    new = apps.codex_trust_text(EXISTING, "/home/u/Full Fat")
     assert new.startswith(EXISTING)
     data = tomllib.loads(new)
-    assert data["projects"]["/home/u/JASP-AI"] == {"trust_level": "trusted"}
+    assert data["projects"]["/home/u/Full Fat"] == {"trust_level": "trusted"}
     assert data["projects"]["/home/u/other"] == {"trust_level": "trusted"}
 
 
 def test_trust_existing_and_windows_path():
     assert apps.codex_trust_text(EXISTING, "/home/u/other") is None
-    win = r"C:\Users\me\JASP-AI"
+    win = r"C:\Users\me\Full Fat"
     new = apps.codex_trust_text("", win)
     assert tomllib.loads(new)["projects"][win]["trust_level"] == "trusted"
     assert apps.codex_trust_state(new, win) == "trusted"
@@ -34,9 +34,9 @@ def test_trust_states():
 def test_trust_file(tmp_path, monkeypatch):
     monkeypatch.setenv("CODEX_HOME", str(tmp_path))
     (tmp_path / "config.toml").write_text(EXISTING)
-    assert apps.trust_codex_folder(tmp_path / "JASP-AI") == "added"
+    assert apps.trust_codex_folder(tmp_path / "Full Fat") == "added"
     assert (tmp_path / "config.toml.before-full-fat").read_text() == EXISTING
-    assert apps.trust_codex_folder(tmp_path / "JASP-AI") == "already"
+    assert apps.trust_codex_folder(tmp_path / "Full Fat") == "already"
     (tmp_path / "config.toml").write_text("broken = [")
     assert apps.trust_codex_folder(tmp_path / "Other") == "skipped"
     assert (tmp_path / "config.toml").read_text() == "broken = ["
@@ -54,8 +54,8 @@ def test_find_override(tmp_path, monkeypatch):
 def test_untrust_removes_only_ours(tmp_path, monkeypatch):
     monkeypatch.setenv("CODEX_HOME", str(tmp_path))
     (tmp_path / "config.toml").write_text(EXISTING)
-    folder = str(tmp_path / "JASP-AI")
-    assert apps.trust_codex_folder(tmp_path / "JASP-AI") == "added"
+    folder = str(tmp_path / "Full Fat")
+    assert apps.trust_codex_folder(tmp_path / "Full Fat") == "added"
     assert apps.untrust_codex_folder(folder) == "removed"
     assert (tmp_path / "config.toml").read_text() == EXISTING
     assert apps.untrust_codex_folder(folder) == "absent"
