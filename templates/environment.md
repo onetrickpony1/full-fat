@@ -14,8 +14,9 @@ How this setup differs from the chat inside JASP:
   user to open JASP, tick Preferences > AI > MCP > "Enable MCP server", restart JASP (the server only starts
   when JASP starts), and restart this
   session. Do not try to reach JASP any other way.
-- Plot results contain base64-encoded images. Never print them; describe plots from
-  their titles, axes and the data around them.
+- Plots in the results point to PNG files in JASP's temp folder. Open those files with
+  your image or file-reading tool to look at a plot before describing it. Never print
+  image data into the chat.
 - When the user asks to annotate an analysis without naming one, use the analysis they
   worked on most recently (check `jasp_analyses_list`), and say which one you picked.
 

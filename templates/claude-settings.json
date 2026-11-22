@@ -1,6 +1,10 @@
 {
-  "enabledMcpjsonServers": ["jasp"],
-  "env": { "MAX_MCP_OUTPUT_TOKENS": "100000" },
+  "enabledMcpjsonServers": [
+    "jasp"
+  ],
+  "env": {
+    "MAX_MCP_OUTPUT_TOKENS": "100000"
+  },
   "permissions": {
     "allow": [
       "mcp__jasp__jasp_ping",
@@ -11,7 +15,9 @@
       "mcp__jasp__jasp_analysis_results",
       "mcp__jasp__jasp_analysis_context",
       "mcp__jasp__jasp_data_info",
-      "mcp__jasp__jasp_data_load_status"
+      "mcp__jasp__jasp_data_load_status",
+      "Read(~/.var/app/org.jaspstats.JASP/data/JASP/JASP/temp/**)",
+      "Read(~/.local/share/JASP/JASP/temp/**)"
     ]
   }
 }
