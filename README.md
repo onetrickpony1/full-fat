@@ -192,7 +192,8 @@ window it ran in.
     icon starts a stand-in chat app in the chat folder, `full-fat doctor` must pass, and uninstall must leave
     nothing behind. `install.cmd` is not run;
   - on macOS (Apple Silicon) and Windows, the real JASP 0.99.0 is installed and its first-start question
-    answered ahead. `full-fat launch` opens it with the connection, and jasp-mcp talks to it. The setting must
+    answered ahead. `full-fat launch` switches the connection on and JASP starts with it (on macOS Full Fat
+    opens JASP; on Windows CI opens the ZIP copy while Full Fat waits), and jasp-mcp talks to it. The setting must
     be off again on disk while JASP still answers, and a second JASP start without Full Fat must have no
     connection. The chat app is a stand-in;
   - on an Intel Mac, the connector starts (its packages install there).

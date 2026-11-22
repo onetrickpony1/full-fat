@@ -72,6 +72,22 @@ def check(marker: Path, folder: Path, how: str, wait: float = 5) -> None:
     marker.unlink()
 
 
+def diagnose(planted: Path | None) -> None:
+    """Print what the double-clicked window did, for the CI log."""
+    print("--- diagnostics", flush=True)
+    if planted:
+        print(f"planted {planted}: exists={planted.exists()}", flush=True)
+        print(planted.read_text(errors="replace") if planted.exists() else "", flush=True)
+    for d in (Path.home() / ".local" / "bin", Path(os.environ.get("RUNNER_TEMP", "/nonexistent"))):
+        if d.is_dir():
+            print(d, sorted(x.name for x in d.iterdir()), flush=True)
+    log = Path(os.environ.get("RUNNER_TEMP", "/nonexistent")) / "chat.log"
+    if log.is_file():
+        print("chat.log:", log.read_text(errors="replace"), flush=True)
+    if sys.platform == "darwin":
+        subprocess.run(["osascript", "-e", 'tell application "Terminal" to get contents of selected tab of front window'])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("launcher", type=Path)
@@ -118,6 +134,9 @@ def main() -> int:
             subprocess.run(["open", str(a.launcher.absolute())], timeout=60, check=True)
         try:
             check(marker, a.folder, "double-click", wait=120)
+        except SystemExit:
+            diagnose(planted)
+            raise
         finally:
             if planted:
                 planted.unlink()
