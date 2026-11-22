@@ -125,13 +125,14 @@ def main() -> int:
             os.environ.update(env)
             os.startfile(a.launcher.absolute())
         elif sys.platform == "darwin":
-            # Terminal doesn't pass our environment on, so the stand-in goes where Full Fat looks for Claude Code
             planted = Path.home() / ".local" / "bin" / "claude"
             if planted.exists():
                 raise SystemExit(f"{planted} exists: not replacing a real Claude Code")
             planted.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(fake, planted)
-            subprocess.run(["open", str(a.launcher.absolute())], timeout=60, check=True)
+            # Terminal, started by `open`, inherits this environment (CI's own stand-in apps included), so it
+            # gets the one this check watches. The planted copy covers a Terminal that was already running.
+            subprocess.run(["open", str(a.launcher.absolute())], env=env, timeout=60, check=True)
         try:
             check(marker, a.folder, "double-click", wait=120)
         except SystemExit:

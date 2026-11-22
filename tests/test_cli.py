@@ -367,16 +367,36 @@ def test_real_terminal_input_replaces_dev_tty(tmp_path):
         "fd = os.open('/dev/tty', os.O_RDWR); os.dup2(fd, 0)\n"
         "before = os.ttyname(0); cli.real_terminal_input()\n"
         "print(before, os.ttyname(0), os.ttyname(1))\n")
+    import select
+    import time
     master, slave = os.openpty()
+    data = b""
     try:
-        r = subprocess.run([sys.executable, str(script)], stdin=slave, stdout=slave, stderr=subprocess.PIPE,
-                           start_new_session=True, timeout=30,
-                           preexec_fn=lambda: __import__("fcntl").ioctl(0, __import__("termios").TIOCSCTTY, 0))
-        import select
-        ready, _, _ = select.select([master], [], [], 10)  # never block if the child printed nothing
-        out = os.read(master, 4096).decode().split() if ready else []
+        # read while the child runs: on macOS the child's last close of the terminal waits until its output is read
+        p = subprocess.Popen([sys.executable, str(script)], stdin=slave, stdout=slave, stderr=subprocess.PIPE,
+                             start_new_session=True,
+                             preexec_fn=lambda: __import__("fcntl").ioctl(0, __import__("termios").TIOCSCTTY, 0))
+        os.close(slave)
+        slave = -1
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master], [], [], 0.5)
+            if ready:
+                try:
+                    chunk = os.read(master, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                data += chunk
+            elif p.poll() is not None:
+                break
+        p.wait(timeout=10)
+        err = p.stderr.read().decode(errors="replace")
     finally:
         os.close(master)
-        os.close(slave)
-    assert r.returncode == 0, r.stderr
+        if slave != -1:
+            os.close(slave)
+    out = data.decode(errors="replace").split()
+    assert p.returncode == 0, err
     assert out[0] == "/dev/tty" and out[1] == out[2] != "/dev/tty"
