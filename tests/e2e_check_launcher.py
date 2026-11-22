@@ -44,11 +44,12 @@ def fake_app(folder: Path, marker: Path) -> Path:
     if os.name == "nt":
         p = folder / "fake chat.cmd"
         p.write_text('@echo off\nif "%~1"=="auth" exit /b 0\nif "%~1"=="login" exit /b 0\n'
-                     f'>"{marker}" echo %CD%\n>>"{marker}" echo %~1\nexit /b 0\n')
+                     f'>"{marker}.tmp" echo %CD%\n>>"{marker}.tmp" echo %*\nmove /y "{marker}.tmp" "{marker}" >nul\nexit /b 0\n')
     else:
         p = folder / "fake chat"
         p.write_text('#!/bin/sh\ncase "$1" in auth|login) exit 0;; esac\n'
-                     f'{{ pwd; printf "%s\\n" "$@"; }} > {shlex.quote(str(marker))}\n')
+                     f'{{ pwd; printf "%s\\n" "$@"; }} > {shlex.quote(str(marker) + ".tmp")}\n'
+                     f'mv {shlex.quote(str(marker) + ".tmp")} {shlex.quote(str(marker))}\n')
         p.chmod(0o755)
     return p
 
@@ -62,11 +63,12 @@ def check(marker: Path, folder: Path, how: str, wait: float = 5) -> None:
             if len(lines) >= 2:
                 break
         time.sleep(0.5)
-    if len(lines) != 2:
+    # the folder it started in, then its arguments (the model and effort options, then the greeting)
+    if len(lines) < 2:
         raise SystemExit(f"{how}: the chat app was not started as expected (got {lines})")
-    if not os.path.samefile(lines[0], folder) or lines[1] != INTRO:
+    if not os.path.samefile(lines[0], folder) or not lines[-1].strip('"').endswith(INTRO):
         raise SystemExit(f"{how}: wrong folder or message: {lines}")
-    print(f"OK ({how}): started in [{lines[0]}] with [{lines[1]}]", flush=True)
+    print(f"OK ({how}): started in [{lines[0]}] with {lines[1:]}", flush=True)
     marker.unlink()
 
 

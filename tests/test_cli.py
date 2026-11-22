@@ -372,7 +372,9 @@ def test_real_terminal_input_replaces_dev_tty(tmp_path):
         r = subprocess.run([sys.executable, str(script)], stdin=slave, stdout=slave, stderr=subprocess.PIPE,
                            start_new_session=True, timeout=30,
                            preexec_fn=lambda: __import__("fcntl").ioctl(0, __import__("termios").TIOCSCTTY, 0))
-        out = os.read(master, 4096).decode().split()
+        import select
+        ready, _, _ = select.select([master], [], [], 10)  # never block if the child printed nothing
+        out = os.read(master, 4096).decode().split() if ready else []
     finally:
         os.close(master)
         os.close(slave)
