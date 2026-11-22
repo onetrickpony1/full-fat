@@ -1,0 +1,157 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.x"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q
+      - run: full-fat --help
+      - run: full-fat --version
+
+  # The one-line installers, run for real with a stand-in JASP settings file (no JASP installed).
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      FULL_FAT_SOURCE: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install.sh
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p "$RUNNER_TEMP/jasp"
+          printf '[General]\naiEnabled=false\n' > "$RUNNER_TEMP/jasp/JASP.conf"
+          FULL_FAT_SETUP_ARGS="--yes --settings-file $RUNNER_TEMP/jasp/JASP.conf --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in" sh install.sh
+          grep -q '^rpcServerEnabled=true' "$RUNNER_TEMP/jasp/JASP.conf"
+          test -f "$HOME/JASP-AI/AGENTS.md"
+          test -f "$HOME/JASP-AI/.codex/config.toml"
+          ls -la "$HOME/Desktop" || true
+          if [ "$RUNNER_OS" = macOS ]; then test -x "$HOME/Desktop/Talk to JASP.command"; fi
+          "$HOME/.local/bin/full-fat" doctor || true
+          "$HOME/.local/bin/full-fat" uninstall --yes
+          if grep -q '^rpcServerEnabled' "$RUNNER_TEMP/jasp/JASP.conf"; then echo "setting not restored"; exit 1; fi
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\jasp" | Out-Null
+          Set-Content -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Value "[General]`r`naiEnabled=false"
+          $env:FULL_FAT_SETUP_ARGS = "--yes --settings-file $env:RUNNER_TEMP\jasp\JASP.ini --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in"
+          powershell -ExecutionPolicy ByPass -File install.ps1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if (-not (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet)) { exit 1 }
+          if (-not (Test-Path "$env:USERPROFILE\JASP-AI\AGENTS.md")) { exit 1 }
+          $desk = [Environment]::GetFolderPath("Desktop")
+          if (-not (Test-Path "$desk\Talk to JASP.cmd")) { exit 1 }
+          Get-Content "$desk\Talk to JASP.cmd"
+          & "$env:USERPROFILE\.local\bin\full-fat.exe" doctor
+          & "$env:USERPROFILE\.local\bin\full-fat.exe" uninstall --yes
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled' -Quiet) { exit 1 }
+
+  # The only real macOS check: install the real JASP, let Full Fat switch on its connection through
+  # `defaults`, open JASP, and talk to it through jasp-mcp as the chat apps would.
+  e2e-macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      JASP_VERSION: "0.99.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the real JASP
+        run: |
+          arch="$(uname -m)"; [ "$arch" = arm64 ] || arch=x86_64
+          curl -fL --retry 3 -o jasp.dmg "https://github.com/jasp-stats/jasp-desktop/releases/download/v$JASP_VERSION/JASP-$JASP_VERSION.0-MacOS-$arch.dmg"
+          hdiutil attach -nobrowse -mountpoint /Volumes/JASP jasp.dmg
+          cp -R /Volumes/JASP/JASP.app /Applications/
+          hdiutil detach /Volumes/JASP
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" /Applications/JASP.app/Contents/Info.plist
+      - run: python -m pip install -e .
+      - name: Full Fat setup (JASP closed, so it should switch the setting on)
+        run: |
+          full-fat setup --yes --app claude --no-install-apps --no-sign-in
+          echo "rpcServerEnabled: $(defaults read org.jasp-stats.JASP rpcServerEnabled)"
+          test "$(defaults read org.jasp-stats.JASP rpcServerEnabled)" = 1
+          grep -c 'JASP-Stats\|Application Support/JASP' "$HOME/JASP-AI/.claude/settings.json" || true
+          cat "$HOME/JASP-AI/.claude/settings.json"
+      - name: Open JASP
+        run: open -a /Applications/JASP.app
+      - name: Talk to JASP through jasp-mcp
+        run: python tests/e2e_check_jasp.py "$HOME/JASP-AI" --wait 900
+      - name: full-fat doctor
+        if: always()
+        run: full-fat doctor || true
+      - name: What JASP wrote itself (proves the settings domain)
+        if: always()
+        run: |
+          ls -la ~/Library/Preferences | grep -i jasp || true
+          defaults read org.jasp-stats.JASP || true
+          ps aux | grep -i '[J]ASP' | head || true
+          ls -la ~/Library/Application\ Support/JASP/JASP 2>/dev/null || true
+          screencapture -x screen.png || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-macos-screen
+          path: screen.png
+          if-no-files-found: ignore
+
+  # The same on Windows with JASP's ZIP build (no installer needed). It keeps its settings in
+  # %APPDATA%\JASP\JASP.ini, which only exists after JASP's first start, so the path is given.
+  e2e-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      JASP_VERSION: "0.99.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download the real JASP (ZIP)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/jasp-stats/jasp-desktop/releases/download/v$env:JASP_VERSION/JASP-$env:JASP_VERSION.0-Windows.zip" -OutFile jasp.zip
+          Expand-Archive jasp.zip -DestinationPath "$env:RUNNER_TEMP\JASP"
+          Get-ChildItem -Recurse "$env:RUNNER_TEMP\JASP" -Filter JASPDesktop.exe | Select-Object -First 1 -ExpandProperty FullName
+      - run: python -m pip install -e .
+      - name: Full Fat setup
+        shell: pwsh
+        run: |
+          full-fat setup --yes --app claude --no-install-apps --no-sign-in --no-launcher --settings-file "$env:APPDATA\JASP\JASP.ini" --jasp-version $env:JASP_VERSION
+          Get-Content "$env:APPDATA\JASP\JASP.ini"
+      - name: Open JASP
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse "$env:RUNNER_TEMP\JASP" -Filter JASPDesktop.exe | Select-Object -First 1 -ExpandProperty FullName
+          Start-Process $exe
+      - name: Talk to JASP through jasp-mcp
+        run: python tests/e2e_check_jasp.py "$env:USERPROFILE\JASP-AI" --wait 900
+        shell: pwsh
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -like "JASP*" } | Format-Table -AutoSize
+          Get-Content "$env:APPDATA\JASP\JASP.ini" -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:LOCALAPPDATA\JASP\JASP" -ErrorAction SilentlyContinue
