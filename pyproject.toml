@@ -16,6 +16,11 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
+[project.urls]
+Homepage = "https://github.com/onetrickpony1/full-fat"
+Issues = "https://github.com/onetrickpony1/full-fat/issues"
+Changelog = "https://github.com/onetrickpony1/full-fat/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 test = ["pytest>=7"]
 
@@ -34,5 +39,8 @@ full_fat = ["templates/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["network: downloads JASP's prompts from GitHub (run with -m network)"]
+markers = [
+    "network: downloads JASP's prompts from GitHub (run with -m network)",
+    "real_connector: runs connector.warm for real (with a fake server)",
+]
 addopts = "-m 'not network'"

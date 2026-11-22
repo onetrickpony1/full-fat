@@ -49,3 +49,31 @@ def test_find_override(tmp_path, monkeypatch):
     assert apps.find(apps.CLAUDE) == str(exe)
     monkeypatch.setenv("FULL_FAT_CLAUDE", str(tmp_path / "missing"))
     assert apps.find(apps.CLAUDE) is None
+
+
+def test_untrust_removes_only_ours(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    (tmp_path / "config.toml").write_text(EXISTING)
+    folder = str(tmp_path / "JASP-AI")
+    assert apps.trust_codex_folder(tmp_path / "JASP-AI") == "added"
+    assert apps.untrust_codex_folder(folder) == "removed"
+    assert (tmp_path / "config.toml").read_text() == EXISTING
+    assert apps.untrust_codex_folder(folder) == "absent"
+    assert apps.untrust_codex_folder("/home/u/other") == "left"  # not ours: written another way
+
+
+def test_claude_plan(monkeypatch):
+    import subprocess
+
+    def fake(out):
+        return lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out, stderr="")
+    monkeypatch.setattr(apps.subprocess, "run", fake('{"loggedIn": true, "subscriptionType": "max"}'))
+    assert apps.claude_plan("claude") == "max"
+    monkeypatch.setattr(apps.subprocess, "run", fake('{"loggedIn": true, "subscriptionType": "Pro"}'))
+    assert apps.claude_plan("claude") == "pro"
+    monkeypatch.setattr(apps.subprocess, "run", fake("not json"))
+    assert apps.claude_plan("claude") is None
+
+
+def test_claude_login_uses_subscription():
+    assert apps.CLAUDE.login == ("auth", "login", "--claudeai")

@@ -24,12 +24,13 @@ How this setup differs from the chat inside JASP:
 - Plots in the results point to PNG files in JASP's temp folder. Open those files with
   your image or file-reading tool to look at a plot before describing it. Never print
   image data into the chat.
-- Shell commands and file edits are switched off in this folder. Work through the JASP
-  tools, and read files when you need to look at a plot or a prompt.
+- Shell commands and file edits are switched off in this folder (in Codex, changing a
+  file needs the user's approval). Work through the JASP tools, and read files when you
+  need to look at a plot or a prompt. Loading a data file asks the user first.
 - When the user types `/annotate` or asks for an annotation, follow `jasp/annotate-prompt.md`.
 - When the user asks to annotate an analysis without naming one, use the analysis they
   worked on most recently (check `jasp_analyses_list`), and say which one you picked.
-- The folder starts on the strongest model at high effort. If the user asks how to
+- The folder starts at high effort (in Claude Code on Opus for Max plans). If the user asks how to
   check or change that: in Claude Code, `/model` and `/effort` (or `/status` to see
   both); in Codex, `/model` picks the model and its reasoning effort, `/status` shows
   them. Lower effort is faster and uses less of their plan; higher effort thinks longer.

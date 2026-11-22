@@ -13,6 +13,7 @@ Sign-in: `claude auth status` and `codex login status` exit with 0 when signed i
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -45,7 +46,8 @@ class App:
                 Path("/usr/local/bin") / self.exe]
 
 
-CLAUDE = App("claude", "Claude (Pro or Max)", "Claude Code", "claude", ("auth", "status"), ("auth", "login"),
+CLAUDE = App("claude", "Claude (Pro or Max)", "Claude Code", "claude", ("auth", "status"),
+             ("auth", "login", "--claudeai"),
              "curl -fsSL https://claude.ai/install.sh | bash",
              "irm https://claude.ai/install.ps1 | iex")
 CODEX = App("codex", "ChatGPT (Plus or Pro)", "Codex", "codex", ("login", "status"), ("login",),
@@ -132,7 +134,7 @@ def codex_trust_text(config_text: str, folder: str) -> str | None:
     if state is not None:
         return None
     sep = "" if not config_text or config_text.endswith("\n\n") else ("\n" if config_text.endswith("\n") else "\n\n")
-    return config_text + sep + f"[projects.{_toml_key(folder)}]\ntrust_level = \"trusted\"\n"
+    return config_text + sep + trust_block(folder)
 
 
 def trust_codex_folder(folder: Path) -> str:
@@ -149,6 +151,11 @@ def trust_codex_folder(folder: Path) -> str:
     new = codex_trust_text(text, str(folder))
     if new is None:
         return "already"
+    try:  # never write a file Codex can't read
+        if codex_trust_state(new, str(folder)) != "trusted":
+            return "skipped"
+    except Exception:  # noqa: BLE001
+        return "skipped"
     cfg.parent.mkdir(parents=True, exist_ok=True)
     backup = cfg.with_name("config.toml.before-full-fat")
     if cfg.is_file() and not backup.exists():
@@ -158,6 +165,41 @@ def trust_codex_folder(folder: Path) -> str:
         f.write(new)
     os.replace(tmp, cfg)
     return "added"
+
+
+def trust_block(folder: str) -> str:
+    return f"[projects.{_toml_key(folder)}]\ntrust_level = \"trusted\"\n"
+
+
+def untrust_codex_folder(folder: str) -> str:
+    """Remove the trust entry Full Fat added, and nothing else. Returns 'removed', 'absent' or 'left'."""
+    cfg = codex_home() / "config.toml"
+    if not cfg.is_file():
+        return "absent"
+    text = cfg.read_text(encoding="utf-8")
+    block = trust_block(folder)
+    if block not in text:
+        return "absent" if codex_trust_state(text, folder) is None else "left"
+    i = text.rindex(block)
+    new = text[:i].rstrip("\n") + ("\n" if text[:i].strip() else "") + text[i + len(block):]
+    if codex_trust_state(new, folder) not in (None,):
+        return "left"
+    tmp = cfg.with_name("config.toml.full-fat-tmp")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+    os.replace(tmp, cfg)
+    return "removed"
+
+
+def claude_plan(exe: str) -> str | None:
+    """'pro', 'max' or None, from `claude auth status` (JSON with subscriptionType)."""
+    try:
+        r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, timeout=60)
+        data = json.loads(r.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    plan = str(data.get("subscriptionType") or "").lower()
+    return plan if plan in ("pro", "max") else None
 
 
 def launch_command(app: App, exe: str, intro: str) -> list[str]:
