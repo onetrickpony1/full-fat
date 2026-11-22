@@ -25,7 +25,7 @@ ESCAPES = {"n": "\n", "t": "\t", '"': '"', "\\": "\\", "'": "'", "r": "\r"}
 
 def fetch(ref, path):
     url = RAW.format(ref=ref, path=path)
-    req = urllib.request.Request(url, headers={"User-Agent": "jasp-subscription-ai"})
+    req = urllib.request.Request(url, headers={"User-Agent": "full-fat"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8")
 

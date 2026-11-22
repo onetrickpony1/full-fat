@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set up a folder where an AI app (Claude Code, Codex CLI) can work with a running JASP
+# Full Fat: set up a folder where an AI app (Claude Code, Codex CLI) can work with a running JASP
 # through JASP's MCP server, using JASP's own prompts.
 #
 # Usage: ./setup.sh [--dir DIR] [--persona alfred|socrates|evelyn|none] [--jasp-version X.Y.Z]
@@ -58,7 +58,7 @@ else
 fi
 
 # 3. Build the workspace folder.
-mkdir -p "$DIR/.claude/commands" "$DIR/jasp"
+mkdir -p "$DIR/.claude/commands" "$DIR/.codex" "$DIR/jasp"
 python3 -I "$HERE/fetch_prompts.py" "$VERSION" "$DIR/jasp"
 
 {
@@ -74,8 +74,13 @@ python3 -I "$HERE/fetch_prompts.py" "$VERSION" "$DIR/jasp"
 cp "$HERE/templates/CLAUDE.md" "$DIR/CLAUDE.md"
 sed -e "s/__JASP_MCP_REF__/$JASP_MCP_REF/" -e "s/__RPC_HOST__/$HOST/" -e "s/__RPC_PORT__/$PORT/" \
 	"$HERE/templates/mcp.json" > "$DIR/.mcp.json"
+sed -e "s/__JASP_MCP_REF__/$JASP_MCP_REF/" -e "s/__RPC_HOST__/$HOST/" -e "s/__RPC_PORT__/$PORT/" \
+	"$HERE/templates/codex-config.toml" > "$DIR/.codex/config.toml"
 cp "$HERE/templates/claude-settings.json" "$DIR/.claude/settings.json"
 cat "$HERE/templates/annotate-head.md" "$DIR/jasp/annotate-prompt.md" > "$DIR/.claude/commands/annotate.md"
 
 echo "Persona: $PERSONA"
-echo "Done. Open JASP, then run:  cd \"$DIR\" && claude"
+echo "Done. Open JASP, then in a terminal:"
+echo "  cd \"$DIR\" && claude     (Claude subscription: Opus, high effort)"
+echo "  cd \"$DIR\" && codex      (ChatGPT subscription: GPT-6.2 Astra, high effort; trust the folder when asked)"
+echo "Change model or effort inside the app: /model and /effort in Claude Code, /model in Codex."

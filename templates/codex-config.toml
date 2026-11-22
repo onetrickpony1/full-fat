@@ -1,0 +1,8 @@
+# Full Fat: Codex settings for this folder (used once you trust the folder).
+model = "gpt-6.2-astra"
+model_reasoning_effort = "high"
+
+[mcp_servers.jasp]
+command = "uvx"
+args = ["--with", "mcp<2", "--from", "git+https://github.com/jasp-stats/jasp-mcp@__JASP_MCP_REF__", "jasp-mcp"]
+env = { JASP_RPC_URL = "http://__RPC_HOST__:__RPC_PORT__/rpc" }
