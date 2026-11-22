@@ -20,7 +20,9 @@ jobs:
       - run: full-fat --help
       - run: full-fat --version
 
-  # The one-line installers, run for real with a stand-in JASP settings file (no JASP installed).
+  # The one-line installers, run for real with a stand-in JASP settings file (no JASP installed), and with
+  # git unusable as on a fresh Mac or Windows PC: setup starts JASP's connector once, so this proves that
+  # jasp-mcp installs without git.
   installer:
     strategy:
       fail-fast: false
@@ -34,6 +36,11 @@ jobs:
       - name: install.sh
         if: runner.os != 'Windows'
         run: |
+          mkdir -p "$RUNNER_TEMP/nogit"
+          printf '#!/bin/sh\necho "git is not installed (CI)" >&2\nexit 127\n' > "$RUNNER_TEMP/nogit/git"
+          chmod +x "$RUNNER_TEMP/nogit/git"
+          export PATH="$RUNNER_TEMP/nogit:$PATH"
+          if git --version; then echo "git still works"; exit 1; fi
           mkdir -p "$RUNNER_TEMP/jasp"
           printf '[General]\naiEnabled=false\n' > "$RUNNER_TEMP/jasp/JASP.conf"
           FULL_FAT_SETUP_ARGS="--yes --settings-file $RUNNER_TEMP/jasp/JASP.conf --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in" sh install.sh
@@ -49,6 +56,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:PATH = ($env:PATH -split ";" | Where-Object { $_ -and -not (Test-Path (Join-Path $_ "git.exe")) }) -join ";"
+          if (Get-Command git -ErrorAction SilentlyContinue) { Write-Host "git still on PATH"; exit 1 }
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\jasp" | Out-Null
           Set-Content -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Value "[General]`r`naiEnabled=false"
           $env:FULL_FAT_SETUP_ARGS = "--yes --settings-file $env:RUNNER_TEMP\jasp\JASP.ini --jasp-version 0.99.0 --app both --no-install-apps --no-sign-in"
@@ -86,6 +95,12 @@ jobs:
           hdiutil detach /Volumes/JASP
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" /Applications/JASP.app/Contents/Info.plist
       - run: python -m pip install -e .
+      - name: Hide git, as on a fresh Mac
+        run: |
+          mkdir -p "$RUNNER_TEMP/nogit"
+          printf '#!/bin/sh\necho "git is not installed (CI)" >&2\nexit 127\n' > "$RUNNER_TEMP/nogit/git"
+          chmod +x "$RUNNER_TEMP/nogit/git"
+          echo "$RUNNER_TEMP/nogit" >> "$GITHUB_PATH"
       - name: Full Fat setup (JASP closed, so it should switch the setting on)
         run: |
           full-fat setup --yes --app claude --no-install-apps --no-sign-in
