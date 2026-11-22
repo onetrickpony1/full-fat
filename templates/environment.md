@@ -11,7 +11,8 @@ How this setup differs from the chat inside JASP:
 - The conversation happens outside the JASP window. Everything you create or change
   appears in JASP's results pane, so tell the user what to look at there.
 - If no `jasp_` tools are available, JASP is not running or its MCP server is off. Ask the
-  user to open JASP, tick Preferences > AI > MCP > "Enable MCP server", and restart this
+  user to open JASP, tick Preferences > AI > MCP > "Enable MCP server", restart JASP (the server only starts
+  when JASP starts), and restart this
   session. Do not try to reach JASP any other way.
 - Plot results contain base64-encoded images. Never print them; describe plots from
   their titles, axes and the data around them.

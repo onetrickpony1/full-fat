@@ -53,7 +53,7 @@ elif [[ -n "$CONF" ]] && ! pgrep -x JASP >/dev/null; then
 	fi
 	echo "JASP MCP server: turned on (backup: $CONF.before-jasp-ai)"
 else
-	echo "JASP MCP server: OFF. In JASP, tick Preferences > AI > MCP > \"Enable MCP server\"."
+	echo "JASP MCP server: OFF. In JASP, tick Preferences > AI > MCP > \"Enable MCP server\", then restart JASP."
 	echo "  (JASP is running, so this script does not edit its settings.)"
 fi
 
