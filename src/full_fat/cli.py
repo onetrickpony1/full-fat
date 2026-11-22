@@ -146,21 +146,6 @@ def sign_in(app: apps.App, exe: str, ui: UI) -> bool:
     return done
 
 
-def claude_plan(a, st: dict, exe: str | None, ui: UI) -> str:
-    """'max' (Opus by default) or 'pro' (Claude Code's own default model)."""
-    if a.plan:
-        return a.plan
-    found = apps.claude_plan(exe) if exe else None
-    if found:
-        ui.ok(f"Claude {found.title()} plan: the chat starts on "
-              + ("Opus" if found == "max" else "Claude Code's usual model") + " at high effort.")
-        return found
-    if ui.yes:
-        return st.get("claude_plan") or "pro"
-    n = ui.choose("Which Claude plan do you have?", ["Pro", "Max"], 2 if st.get("claude_plan") == "max" else 1)
-    return ["pro", "max"][n - 1]
-
-
 def warm_connector(folder: Path, ui: UI) -> bool:
     import json  # noqa: PLC0415
     try:
@@ -221,10 +206,8 @@ def cmd_setup(a, ui: UI) -> int:
         ui.say("  Check the internet connection and run Full Fat again.")
         return 1
     persona = pick_persona(a.persona or st.get("persona"), p, ui)
-    plan = claude_plan(a, st, exes.get("claude"), ui) if "claude" in keys else st.get("claude_plan")
     host, port = j.host_port()
-    res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs,
-                          claude_model="opus" if plan == "max" else None)
+    res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs)
     ui.ok(f"Chat folder ready: {folder} (JASP instructions from {p.ref}, persona {persona}"
           f"{', careful mode' if careful else ''}).")
     for n in p.notes:
@@ -260,7 +243,7 @@ def cmd_setup(a, ui: UI) -> int:
             ui.ok(f'"{launcher.NAME}" icon: {x}')
 
     old_launchers = [x for x in st.get("launchers", []) if x not in launchers]
-    state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful, "claude_plan": plan,
+    state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful,
                 "launchers": launchers + old_launchers, "settings_file": a.settings_file,
                 "jasp_version": j.version})
 
@@ -517,8 +500,6 @@ def parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd")
     s = sub.add_parser("setup", parents=[common], help="set everything up (the default)")
     s.add_argument("--app", choices=["claude", "codex", "both"], help="which chat app to set up")
-    s.add_argument("--plan", choices=["pro", "max"],
-                   help="your Claude plan: max starts on Opus, pro on Claude Code's default (found when signed in)")
     s.add_argument("--persona", help="JASP persona: alfred, socrates, evelyn or none (default alfred)")
     s.add_argument("--careful", action=argparse.BooleanOptionalAction, default=None,
                    help="ask before every change to JASP; reading JASP still runs without asking")

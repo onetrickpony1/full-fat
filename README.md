@@ -26,7 +26,6 @@ Type a number and press Enter [1]: 1
   OK: You are signed in to Claude Code.
 
 == Chat folder
-  OK: Claude Max plan: the chat starts on Opus at high effort.
   OK: Chat folder ready: /Users/you/JASP-AI (JASP instructions from v0.99.0, persona alfred).
   Getting the link between the chat and JASP ready (the first time this takes a minute)...
   OK: The chat can reach JASP's tools.
@@ -55,7 +54,8 @@ Start a chat now? [Y/n]
   assistant. `/annotate` in Claude Code writes an annotation into the JASP output.
 - **"Talk to JASP" icon.** It checks that JASP is open and answering (and opens JASP or fixes the setting if
   not), then starts the chat with a short greeting that says what you can ask.
-- **High effort from the start**, on Claude Opus for Max plans and GPT-6.2 Astra in Codex. Change it in the app.
+- **Top model at high effort from the start**: Claude Opus in Claude Code, GPT-6.2 Astra in Codex. Change it
+  in the app.
 - **The same tools as JASP's own assistant, without asking**: creating and running analyses, reports and
   annotations. Loading a data file asks first. `--careful` makes it ask before every change to JASP.
 - **`full-fat doctor`** checks everything and says how to fix each problem. `full-fat uninstall` removes the
@@ -124,7 +124,6 @@ Setup options:
 
 ```
 --app claude|codex|both   which chat app to set up (asked if not given)
---plan pro|max            your Claude plan (found from the sign-in, else asked)
 --persona NAME            JASP persona: alfred (default), socrates, evelyn or none
 --careful / --no-careful  ask before every change to JASP (remembered)
 --dir DIR                 chat folder (default ~/JASP-AI)
@@ -152,9 +151,9 @@ and `/effort` change the model and effort. In Codex, `/model` does both.
   its documented per-tool approvals (`default_tools_approval_mode`, `tools.<tool>.approval_mode`) with
   `approvals_reviewer = "user"`, so you answer, not Codex's automatic reviewer
   ([config reference](https://developers.openai.com/codex/config-reference)).
-- **Models.** With Claude Max the chat starts on Opus. With Pro it uses Claude Code's usual model. Both start at
-  high effort. Codex starts on GPT-6.2 Astra at high effort. If Codex says your plan can't use that model,
-  type `/model` in Codex and pick another one.
+- **Models.** The chat starts on Opus (Claude Code) or GPT-6.2 Astra (Codex), at high effort. That uses a plan's
+  limits faster: if you hit your limit, type `/model` to pick a lighter model or `/effort` to lower the effort.
+  If Codex says your plan can't use its model, type `/model` and pick another one.
 - **Folder trust.** Codex only uses the folder's settings when the folder is trusted, so setup adds a trust
   entry for the chat folder to `~/.codex/config.toml` (and nothing else), and `full-fat uninstall` removes it
   again. Claude Code has no supported way to do that, so it asks once.

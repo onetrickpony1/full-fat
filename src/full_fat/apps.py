@@ -191,16 +191,5 @@ def untrust_codex_folder(folder: str) -> str:
     return "removed"
 
 
-def claude_plan(exe: str) -> str | None:
-    """'pro', 'max' or None, from `claude auth status` (JSON with subscriptionType)."""
-    try:
-        r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, timeout=60)
-        data = json.loads(r.stdout)
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
-    plan = str(data.get("subscriptionType") or "").lower()
-    return plan if plan in ("pro", "max") else None
-
-
 def launch_command(app: App, exe: str, intro: str) -> list[str]:
     return [exe, intro]

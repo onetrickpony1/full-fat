@@ -167,14 +167,3 @@ def test_setup_fails_when_connector_fails(env, monkeypatch, capsys):
     assert cli.main(setup_args(tmp_path, conf)) == 1
     out = capsys.readouterr().out
     assert "could not be prepared" in out and "git is not installed" in out and "Almost done" in out
-
-
-def test_plan_choice(env):
-    tmp_path, conf = env
-    cli.main(setup_args(tmp_path, conf, "--plan", "max"))
-    s = json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())
-    assert s["model"] == "opus" and state.load()["claude_plan"] == "max"
-    cli.main(setup_args(tmp_path, conf))  # remembered with --yes
-    assert json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())["model"] == "opus"
-    cli.main(setup_args(tmp_path, conf, "--plan", "pro"))
-    assert "model" not in json.loads((tmp_path / "ws" / ".claude" / "settings.json").read_text())

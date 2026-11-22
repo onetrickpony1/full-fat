@@ -172,13 +172,13 @@ def test_no_annotation_prompt(tmp_path, p):
     assert not (tmp_path / ".claude/commands/annotate.md").exists()
 
 
-def test_model_by_plan(tmp_path, p):
-    build(tmp_path, p, model=None)  # Pro: Claude Code's own default
+def test_model_ownership(tmp_path, p):
+    build(tmp_path, p, model=None)  # no model wanted: none written
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
     assert "model" not in s and s["effortLevel"] == "high"
-    build(tmp_path, p, model="opus")  # now Max
+    build(tmp_path, p, model="opus")
     assert json.loads((tmp_path / ".claude/settings.json").read_text())["model"] == "opus"
-    build(tmp_path, p, model=None)  # back to Pro: Full Fat's own "opus" goes again
+    build(tmp_path, p, model=None)  # Full Fat's own "opus" may be taken back
     assert "model" not in json.loads((tmp_path / ".claude/settings.json").read_text())
     s = json.loads((tmp_path / ".claude/settings.json").read_text())
     s["model"] = "sonnet"  # the user's own choice is never touched

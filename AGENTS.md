@@ -62,8 +62,7 @@ CI's `e2e-macos` and `e2e-windows` jobs are the only real check: they install th
   the persona indented two spaces, exactly as `aiBridge.cpp` (v0.98.1 569-590) builds it.
 - `CLAUDE.md`: `@AGENTS.md`, from `templates/claude-md.txt` (the repo itself must not have a CLAUDE.md).
 - `.mcp.json`: starts jasp-mcp for Claude Code.
-- `.claude/settings.json`: model opus only for Claude Max (Pro: no model, Claude Code's default; the plan comes
-  from `claude auth status` subscriptionType, else asked, and is remembered), effortLevel high,
+- `.claude/settings.json`: model opus for every plan (the owner uses Opus on Pro; don't ask for the plan), effortLevel high,
   `enabledMcpjsonServers: [jasp]`, `MAX_MCP_OUTPUT_TOKENS` 100000, allow `workspace.DEFAULT_TOOLS` (careful:
   `READ_ONLY_TOOLS`), Read on JASP's plot folders, deny Bash/PowerShell/Edit/Write/NotebookEdit.
 - Tool parity: `JASP_ASSISTANT_TOOLS` is every method in JASP's `Resources/JASP_Capabilities.json`, which is what

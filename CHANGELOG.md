@@ -15,7 +15,7 @@
   setting if not, then starts the chat with a greeting that says what you can ask.
 - **The same tools as JASP's own assistant, without asking.** Loading a data file asks first, and
   `--careful` asks before every change to JASP. Shell commands are off in the chat folder.
-- **Starts at high effort**, on Opus for Claude Max plans and GPT-6.2 Astra in Codex.
+- **Starts on the top model at high effort**: Opus in Claude Code, GPT-6.2 Astra in Codex.
 - **`full-fat doctor` and `full-fat uninstall`.** Doctor checks every part and says how to fix it. Uninstall
   removes the icon and the chat folder (asking first), puts JASP's setting back and removes Codex's trust
   entry for the folder.

@@ -30,7 +30,9 @@ How this setup differs from the chat inside JASP:
 - When the user types `/annotate` or asks for an annotation, follow `jasp/annotate-prompt.md`.
 - When the user asks to annotate an analysis without naming one, use the analysis they
   worked on most recently (check `jasp_analyses_list`), and say which one you picked.
-- The folder starts at high effort (in Claude Code on Opus for Max plans). If the user asks how to
+- The folder starts on the top model at high effort (Opus in Claude Code, GPT-6.2 Astra in
+  Codex). That uses a plan's limits faster: if the user hits their limit, tell them to type
+  `/model` to pick a lighter model or `/effort` to lower the effort. If the user asks how to
   check or change that: in Claude Code, `/model` and `/effort` (or `/status` to see
   both); in Codex, `/model` picks the model and its reasoning effort, `/status` shows
   them. Lower effort is faster and uses less of their plan; higher effort thinks longer.
