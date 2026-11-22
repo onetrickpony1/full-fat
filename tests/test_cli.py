@@ -247,6 +247,31 @@ def test_connect_gives_up_and_switches_off(env, monkeypatch):
     assert "rpcServerEnabled" not in conf.read_text()
 
 
+def test_connect_notices_when_jasp_does_not_start(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    w = World(conf)
+    w.open = lambda _j: True  # the start fails: JASP never shows up as running
+    clock = {"t": 0.0}
+
+    def tick():
+        clock["t"] += 1
+        return clock["t"]
+    monkeypatch.setattr(cli.time, "monotonic", tick)
+    monkeypatch.setattr("full_fat.ui.time.monotonic", tick)
+    monkeypatch.setattr(jasp, "open_jasp", w.open)
+    asked = []
+
+    def inp(prompt):
+        asked.append(prompt)
+        raise EOFError
+    assert not cli.connect(jasp.detect(str(conf), "0.98.1"), "127.0.0.1", 48164, UI(inp=inp),
+                           is_running=w.running, ping=w.ping, start_wait=1000)
+    assert "JASP closed again, or it did not start" in capsys.readouterr().out
+    assert asked and "Open JASP yourself" in asked[0]
+    assert clock["t"] < 200  # it stopped waiting soon, not after the full wait
+    assert "rpcServerEnabled" not in conf.read_text()
+
+
 def test_connect_keeps_the_users_own_setting(env, monkeypatch):
     tmp_path, conf = env
     conf.write_text("[General]\nrpcServerEnabled=true\n")

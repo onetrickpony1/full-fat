@@ -40,6 +40,8 @@ The first time you start a chat:
   - Claude shows a few welcome screens (for example a choice of colours). Press Enter on each.
   - Claude asks whether you trust the chat folder. Press the Down arrow once, so that "Yes, I trust this
   folder" is picked, then press Enter. (Enter alone picks "No, exit".)
+  - Before the chat loads a data file, or writes a report or an annotation into JASP, it asks you. To let
+  it, choose the first option ("Yes" in Claude, "Allow" in ChatGPT) and press Enter.
   - If your Mac offers to install "command line developer tools", click Cancel. The chat doesn't need them.
 Start a chat now? [Y/n]
 ```
@@ -114,7 +116,8 @@ Running the same line again updates Full Fat and runs the setup again.
    Mac: Cmd+Q in JASP), so save your work. The first time, press Enter on Claude's welcome screens. When
    Claude asks whether you trust the folder, press the Down arrow once ("Yes, I trust this folder"), then
    Enter. Then type your questions, for example "What analysis fits my data?" or "Explain the t-test
-   results". When the chat wants to write a report or an annotation into JASP, it asks: choose Yes.
+   results". Before the chat loads a data file, or writes a report or an annotation into JASP, it asks: choose
+   the first option ("Yes" in Claude, "Allow" in ChatGPT) and press Enter.
 
 Close the window when you are done. Everything the chat creates is in JASP's results.
 

@@ -48,6 +48,9 @@ def check_version(j: jasp.Jasp, ui: UI) -> bool:
     return True
 
 
+GRACE = 15  # seconds JASP may take to show up as running after Full Fat opens it
+
+
 def quit_hint() -> str:
     return "press Cmd+Q in JASP" if sys.platform == "darwin" else "close its window"
 
@@ -287,6 +290,8 @@ def first_run_notes(keys: list[str], ui: UI) -> None:
                'this folder" is picked, then press Enter. (Enter alone picks "No, exit".)')
     if "codex" in keys:
         ui.say("  - Codex may show a welcome screen or ask about the folder. Choose the first option and press Enter.")
+    ui.say("  - Before the chat loads a data file, or writes a report or an annotation into JASP, it asks you. To "
+           'let it, choose the first option ("Yes" in Claude, "Allow" in ChatGPT) and press Enter.')
     if sys.platform == "darwin":
         ui.say("  - If your Mac offers to install \"command line developer tools\", click Cancel. The chat "
                "doesn't need them.")
@@ -338,17 +343,37 @@ def _connect(j, store, host, port, ui: UI, is_running, ping, start_wait) -> bool
         for n in j.notes:
             ui.say("  " + n)
         return False
-    if jasp.open_jasp(j):
+    opened = jasp.open_jasp(j)
+    if opened:
         msg = ("Opening JASP for you. This can take a minute. If JASP asks a question (for example about "
                "checking for updates), answer it: JASP connects after that.")
     else:
         msg = "Open JASP now. Full Fat waits until it answers."
     while True:
-        if waiting(ui, msg, lambda: ping(host, port), timeout=start_wait):
-            return True
-        if ui.yes or not ui.enter("JASP has not answered yet. If JASP shows a question, answer it. Then press "
-                                  "Enter to keep waiting (or Ctrl+C to stop)."):
+        started = time.monotonic()
+        gone = {"since": None}
+
+        def answered_or_gone() -> bool:
+            """Stop waiting when JASP answers, or when the JASP Full Fat opened is gone (it closed or crashed)."""
+            if ping(host, port):
+                return True
+            if opened and time.monotonic() - started > GRACE and not is_running():
+                gone["since"] = gone["since"] or time.monotonic()
+                return time.monotonic() - gone["since"] > GRACE
+            gone["since"] = None
             return False
+        waiting(ui, msg, answered_or_gone, timeout=start_wait)
+        if ping(host, port):
+            return True
+        if gone["since"]:
+            ui.problem("JASP closed again, or it did not start.")
+            prompt = "Open JASP yourself, then press Enter (or Ctrl+C to stop)."
+        else:
+            prompt = ("JASP has not answered yet. If JASP shows a question, answer it. Then press Enter to keep "
+                      "waiting (or Ctrl+C to stop).")
+        if ui.yes or not ui.enter(prompt):
+            return False
+        opened = False
         msg = "Waiting for JASP to answer..."
 
 

@@ -22,7 +22,10 @@
 - **Starts on the top model at high effort**: Opus in Claude Code, GPT-6.2 Astra in Codex. A model you save as
   your default with `/model` is kept for the next chats.
 - **Works on Intel Macs**: the parts the chat needs to reach JASP are installed as ready-made packages.
-- **Clear first-chat steps**: the trust question in Claude Code needs the Down arrow, then Enter.
+- **Clear first-chat steps**: the trust question in Claude Code needs the Down arrow, then Enter, and the
+  approval question before loading data or writing a report is answered with the first option.
+- **Notices when JASP does not start.** If the JASP that Full Fat opened closes or crashes, it says so and asks
+  you to open JASP yourself, instead of waiting.
 - **`full-fat doctor` and `full-fat uninstall`.** Doctor checks every part and says how to fix it. Uninstall
   asks first, removes the icon and only the files Full Fat made in the chat folder (the folder too if nothing
   else is in it), puts JASP's setting back and removes Codex's trust entry for the folder. It never deletes a
