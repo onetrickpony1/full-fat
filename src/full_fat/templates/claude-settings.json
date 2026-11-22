@@ -1,0 +1,10 @@
+{
+  "model": "opus",
+  "effortLevel": "high",
+  "enabledMcpjsonServers": [
+    "jasp"
+  ],
+  "env": {
+    "MAX_MCP_OUTPUT_TOKENS": "100000"
+  }
+}

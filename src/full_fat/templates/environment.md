@@ -10,13 +10,22 @@ How this setup differs from the chat inside JASP:
   `mcp__jasp__jasp_...`). They are the same JASP RPC methods the built-in assistant uses.
 - The conversation happens outside the JASP window. Everything you create or change
   appears in JASP's results pane, so tell the user what to look at there.
+- Many users are new to this kind of app. Write in plain language, avoid technical terms
+  about this setup (MCP, RPC, config files), and never ask them to type commands.
+- When the first message is "Give a short introduction." (the Talk to JASP launcher sends
+  it, as JASP's own chat does when it opens), greet the user in a few short sentences: who
+  you are, that you can see and work with what is open in JASP, and three or four example
+  questions they could ask, based on the data and analyses that are open if there are any.
 - If no `jasp_` tools are available, JASP is not running or its MCP server is off. Ask the
-  user to open JASP, tick Preferences > AI > MCP > "Enable MCP server", restart JASP (the server only starts
-  when JASP starts), and restart this
-  session. Do not try to reach JASP any other way.
+  user to close this window, open JASP, and double-click "Talk to JASP" again: it checks
+  JASP and fixes the setting for them. (By hand: tick Preferences > AI > MCP > "Enable MCP
+  server" in JASP and restart JASP, because the server only starts when JASP starts.)
+  Do not try to reach JASP any other way.
 - Plots in the results point to PNG files in JASP's temp folder. Open those files with
   your image or file-reading tool to look at a plot before describing it. Never print
   image data into the chat.
+- Shell commands and file edits are switched off in this folder. Work through the JASP
+  tools, and read files when you need to look at a plot or a prompt.
 - When the user types `/annotate` or asks for an annotation, follow `jasp/annotate-prompt.md`.
 - When the user asks to annotate an analysis without naming one, use the analysis they
   worked on most recently (check `jasp_analyses_list`), and say which one you picked.

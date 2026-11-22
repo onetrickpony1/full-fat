@@ -1,0 +1,38 @@
+[project]
+name = "full-fat"
+version = "0.1.0"
+description = "Chat with Claude or ChatGPT about your JASP analyses through JASP's own MCP server, using the Claude or ChatGPT subscription you already have"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "LEGAL.md"]
+requires-python = ">=3.11"
+dependencies = []
+keywords = ["jasp", "statistics", "mcp", "claude-code", "codex"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+full-fat = "full_fat.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+full_fat = ["templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: downloads JASP's prompts from GitHub (run with -m network)"]
+addopts = "-m 'not network'"
