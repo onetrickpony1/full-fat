@@ -11,13 +11,25 @@ Full Fat is a setup tool that runs on your own computer. It:
 - downloads text from JASP's public source code on GitHub (the AI system prompt, the annotation prompt and the
   persona prompts in [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop));
 - writes configuration files for Claude Code and Codex CLI into a folder on your computer, and a launcher icon;
+- adds a trust entry for that folder to Codex's settings (`~/.codex/config.toml`) when you set up Codex;
 - can run the official installers of Claude Code (Anthropic) and Codex CLI (OpenAI), and their sign-in commands,
   when you agree to it.
+
+Everything that is downloaded, and from where:
+
+- **uv**, from astral.sh (by the install line, if you don't have it), and **a Python build** that uv fetches
+  for Full Fat if your computer has no suitable one;
+- **Full Fat itself**, from this GitHub repository;
+- **JASP's prompts**, from github.com/jasp-stats/jasp-desktop (raw.githubusercontent.com), at every setup;
+- **jasp-mcp**, JASP's official connector, from github.com/jasp-stats/jasp-mcp at a fixed version, and the
+  Python packages it needs, from the Python Package Index (pypi.org), when setup starts it for the first time;
+- **Claude Code** from claude.ai and **Codex CLI** from chatgpt.com, through their official installers, only
+  when you agree to install them. They then update themselves as their makers decide.
 
 ## 2. Not affiliated
 
 Full Fat is an independent project. It is **not affiliated with, made by or endorsed by** the JASP team, the
-University of Amsterdam, JASP Services B.V., Anthropic or OpenAI. "JASP", "Claude", "ChatGPT" and "Codex" are
+University of Amsterdam, Anthropic or OpenAI. "JASP", "Claude", "ChatGPT" and "Codex" are
 names of their owners, used here only to say what the Software works with.
 
 ## 3. JASP's text and software

@@ -17,7 +17,8 @@ Project-specific rules. General repo rules are in the owner's conventions file.
   as `<name>.old-<date>`. `.full-fat.json` holds the hashes of what Full Fat wrote. Folders made by the old
   `setup.sh` (no manifest) are recognised by `workspace.MARKERS`.
 - **Codex trust**: only append a `[projects."<chat folder>"]` table to `~/.codex/config.toml` when there is no
-  entry for that folder and the file parses. Never touch other entries. Claude Code has no supported trust
+  entry for that folder, the file parses and the new text parses too. Never touch other entries. Uninstall
+  removes exactly the block Full Fat appended (state key `codex_trust_added`). Claude Code has no supported trust
   setting, so don't edit `~/.claude.json`.
 - Plain English in every message a user sees. No "MCP", "RPC" or "config" in setup messages (README Notes and
   code comments may use them).
@@ -25,10 +26,15 @@ Project-specific rules. General repo rules are in the owner's conventions file.
 ## jasp-mcp
 
 Pinned to `72d9d7be9c003b9681b40871ee5850795108e5ab` (`workspace.JASP_MCP_SHA`) and run as
-`uvx --with "mcp<2" --from git+https://github.com/jasp-stats/jasp-mcp@<sha> jasp-mcp`. jasp-mcp crashes with the
-MCP Python SDK 2.x (`'Server' object has no attribute 'list_tools'`), hence `mcp<2`. Before moving the pin, run
-`tests/e2e_check_jasp.py` against a running JASP. The uvx path is written as an absolute path when found, so the
-apps work even before the shell's PATH is updated.
+`uvx --with "mcp<2" --from "jasp-mcp @ https://github.com/jasp-stats/jasp-mcp/archive/<sha>.zip" jasp-mcp`.
+- **Never use `git+https`**: it needs git, which new Macs and Windows PCs lack (on a Mac it opens Apple's
+  "install developer tools" dialog). The archive builds with hatchling and no git. CI's installer job hides git
+  to keep this true.
+- jasp-mcp crashes with the MCP Python SDK 2.x (`'Server' object has no attribute 'list_tools'`), hence `mcp<2`.
+- Setup starts the connector once (`connector.warm`: MCP `initialize`, then stop) so the first chat doesn't time
+  out while uvx downloads about 30 packages. Setup fails (exit 1) if that fails.
+- Before moving the pin, run `tests/e2e_check_jasp.py` against a running JASP. The uvx path is written as an
+  absolute path when found, so the apps work even before the shell's PATH is updated.
 
 ## What JASP's source says (checked 2026-11-22 at v0.98.0, v0.98.1, v0.98.8, v0.99.0, development)
 
@@ -52,17 +58,26 @@ CI's `e2e-macos` and `e2e-windows` jobs are the only real check: they install th
 
 ## Generated files (the user's chat folder, default ~/JASP-AI)
 
-- `AGENTS.md`: `templates/environment.md` + JASP's system prompt + "Persona Prompt:" with the persona indented two
-  spaces. Keep this layout: the current workspace was tested with it.
-- `CLAUDE.md`: `@AGENTS.md` (product file; the repo itself must not have a CLAUDE.md).
+- `AGENTS.md`: `templates/environment.md` + JASP's system prompt + "Persona Prompt:", "  Your name is: <name>" and
+  the persona indented two spaces, exactly as `aiBridge.cpp` (v0.98.1 569-590) builds it.
+- `CLAUDE.md`: `@AGENTS.md`, from `templates/claude-md.txt` (the repo itself must not have a CLAUDE.md).
 - `.mcp.json`: starts jasp-mcp for Claude Code.
-- `.claude/settings.json`: model opus, effortLevel high, `enabledMcpjsonServers: [jasp]`, `MAX_MCP_OUTPUT_TOKENS`
-  100000, allow `mcp__jasp` (all JASP tools; careful mode: only `workspace.READ_ONLY_TOOLS`), Read on JASP's plot
-  folders, deny Bash/PowerShell/Edit/Write/NotebookEdit.
+- `.claude/settings.json`: model opus only for Claude Max (Pro: no model, Claude Code's default; the plan comes
+  from `claude auth status` subscriptionType, else asked, and is remembered), effortLevel high,
+  `enabledMcpjsonServers: [jasp]`, `MAX_MCP_OUTPUT_TOKENS` 100000, allow `workspace.DEFAULT_TOOLS` (careful:
+  `READ_ONLY_TOOLS`), Read on JASP's plot folders, deny Bash/PowerShell/Edit/Write/NotebookEdit.
+- Tool parity: `JASP_ASSISTANT_TOOLS` is every method in JASP's `Resources/JASP_Capabilities.json`, which is what
+  a persona with `enabledCapabilities ["*"]` gets (`Desktop/gui/aipersonamodel.cpp` v0.98.1 402-433). `write_report`
+  only makes a report inside JASP (`Desktop/analysis/analyses.cpp` 1697). `data_load` opens any file path and replaces
+  JASP's data (`Desktop/mainwindow.cpp` 1460) and is not in the capabilities, so it always asks, as does
+  `analysis_composeResults`.
 - `.claude/commands/annotate.md`: `/annotate` with JASP's annotation prompt.
-- `.codex/config.toml`: model gpt-6.2-astra, effort high, read-only sandbox, `mcp_servers.jasp` with
-  `default_tools_approval_mode = "approve"` (careful: `"prompt"`, reading tools `"approve"`, and
-  `approvals_reviewer = "user"`, because a user-level `guardian_subagent` reviewer would otherwise approve for them).
+- `.codex/config.toml`: model gpt-6.2-astra, effort high, read-only sandbox, `features.shell_tool = false`,
+  `approvals_reviewer = "user"` (a user-level `guardian_subagent` reviewer would otherwise approve for them),
+  `mcp_servers.jasp` with `default_tools_approval_mode = "prompt"` and `tools.<tool>.approval_mode = "approve"` for
+  `DEFAULT_TOOLS` (careful: `READ_ONLY_TOOLS`). Keys from https://developers.openai.com/codex/config-reference
+  (now served at learn.chatgpt.com/docs/config-file/config-reference), checked with Codex 0.169: "prompt" blocks
+  in `codex exec`, "approve" runs, and the project file's `approvals_reviewer` is honoured.
 - `jasp/`: the downloaded prompts and `source.txt`. `.full-fat.json`: the manifest.
 
 ## Code

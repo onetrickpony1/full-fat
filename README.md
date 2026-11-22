@@ -2,7 +2,7 @@
 
 Full Fat lets you talk to Claude or ChatGPT about your JASP analyses, using a subscription you already pay
 for (Claude Pro or Max through Claude Code, or ChatGPT Plus or Pro through Codex). The chat inside JASP needs a
-paid API key or uses small free models; with Full Fat the full models read your data and results, run
+paid API key or uses small free models. With Full Fat, the full models read your data and results, run
 analyses and write annotations in JASP through JASP's own connection for AI apps (its MCP server). Full Fat is
 a setup tool: it switches that connection on, downloads JASP's own AI instructions for the JASP version you
 have, and makes a chat folder plus a "Talk to JASP" icon on your Desktop.
@@ -10,12 +10,11 @@ have, and makes a chat folder plus a "Talk to JASP" icon on your Desktop.
 ```
 $ full-fat
 Full Fat sets up a chat with Claude or ChatGPT that can see and work with JASP.
+It uses the subscription you already pay for. It asks a few simple questions on the way.
 
 == JASP
   OK: JASP 0.99.0 found.
-JASP is open. Full Fat needs to switch on one JASP setting, and that only works while JASP is closed.
-  Save your work in JASP, then close JASP. Full Fat waits here until it has closed.
-  OK: Switched on JASP's connection for AI apps.
+  OK: JASP's connection for AI apps is already switched on.
 
 == Chat app
 Which do you pay for?
@@ -27,13 +26,21 @@ Type a number and press Enter [1]: 1
   OK: You are signed in to Claude Code.
 
 == Chat folder
+  OK: Claude Max plan: the chat starts on Opus at high effort.
   OK: Chat folder ready: /Users/you/JASP-AI (JASP instructions from v0.99.0, persona alfred).
+  Getting the link between the chat and JASP ready (the first time this takes a minute)...
+  OK: The chat can reach JASP's tools.
   OK: "Talk to JASP" icon: /Users/you/Desktop/Talk to JASP.command
 
 == Done
 To chat about your JASP work:
   1. Open JASP.
   2. Double-click "Talk to JASP" on your Desktop.
+The first time you start a chat:
+  - Claude shows a few welcome screens (for example a choice of colours). Press Enter on each.
+  - Claude asks whether you trust the chat folder. Press Enter to say yes.
+  - If your Mac offers to install "command line developer tools", click Cancel. The chat doesn't need them.
+Start a chat now? [Y/n]
 ```
 
 ## Features
@@ -48,10 +55,9 @@ To chat about your JASP work:
   assistant. `/annotate` in Claude Code writes an annotation into the JASP output.
 - **"Talk to JASP" icon.** It checks that JASP is open and answering (and opens JASP or fixes the setting if
   not), then starts the chat with a short greeting that says what you can ask.
-- **Strongest model at high effort** to start with (Claude Opus, GPT-6.2 Astra). Change it in the app.
-- **Same freedom as JASP's own assistant.** The JASP tools run without asking, as they do in JASP. Shell
-  commands and file edits are switched off in the chat folder. `--careful` makes it ask before every change
-  to JASP instead.
+- **High effort from the start**, on Claude Opus for Max plans and GPT-6.2 Astra in Codex. Change it in the app.
+- **The same tools as JASP's own assistant, without asking**: creating and running analyses, reports and
+  annotations. Loading a data file asks first. `--careful` makes it ask before every change to JASP.
 - **`full-fat doctor`** checks everything and says how to fix each problem. `full-fat uninstall` removes the
   icon and chat folder and puts JASP's setting back.
 - **Safe to run again.** It updates the chat folder without deleting anything you put there.
@@ -63,11 +69,16 @@ Plus or Pro, subscription.
 
 ### Windows
 
-Double-click `install.cmd` (download it from this page), or open PowerShell and run:
+1. Press the Windows key, type `PowerShell` and press Enter. A window with text opens.
+2. Copy this whole line, paste it into that window (right-click pastes) and press Enter:
 
-```
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/onetrickpony1/full-fat/main/install.ps1 | iex"
-```
+   ```
+   powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/onetrickpony1/full-fat/main/install.ps1 | iex"
+   ```
+3. Answer the questions.
+
+If someone gave you `install.cmd`, you can double-click it instead. Windows may warn that it comes from the
+internet or that it "protected your PC": click More info, then Run anyway.
 
 ### macOS
 
@@ -78,10 +89,6 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/one
    curl -LsSf https://raw.githubusercontent.com/onetrickpony1/full-fat/main/install.sh | sh
    ```
 3. Answer the questions. When your Mac asks whether Terminal may use your Desktop folder, click Allow.
-
-You can also download `install.command` and double-click it. Downloaded scripts are often blocked by macOS
-("Apple could not verify..."): then open System Settings > Privacy & Security, scroll down, click Open Anyway
-and enter your password. If it says you don't have permission to open it, use the Terminal line above.
 
 ### Linux
 
@@ -95,12 +102,12 @@ Running the same line again updates Full Fat and runs the setup again.
 
 ### For friends: 3 steps
 
-1. **Install.** Run the install line above (on a Mac: step by step in Terminal). Answer its questions.
+1. **Install.** Follow the steps under Install for your computer, and answer the questions.
 2. **Sign in.** When it says so, a browser window opens. Sign in with your Claude or ChatGPT account (the one
-   you pay for), allow access, and go back to the Terminal window.
-3. **Chat.** Double-click "Talk to JASP" on your Desktop. The first time, Claude asks whether you trust the
-   folder: press Enter. Then type your questions, for example "What analysis fits my data?" or "Explain the
-   t-test results".
+   you pay for), allow access, and go back to the window with text.
+3. **Chat.** Double-click "Talk to JASP" on your Desktop. The first time, press Enter on Claude's welcome
+   screens and say yes when it asks whether you trust the folder. Then type your questions, for example "What
+   analysis fits my data?" or "Explain the t-test results".
 
 Close the window when you are done. Everything the chat creates is in JASP's results.
 
@@ -117,6 +124,7 @@ Setup options:
 
 ```
 --app claude|codex|both   which chat app to set up (asked if not given)
+--plan pro|max            your Claude plan (found from the sign-in, else asked)
 --persona NAME            JASP persona: alfred (default), socrates, evelyn or none
 --careful / --no-careful  ask before every change to JASP (remembered)
 --dir DIR                 chat folder (default ~/JASP-AI)
@@ -136,17 +144,23 @@ and `/effort` change the model and effort. In Codex, `/model` does both.
 - **What changes in JASP.** Only one setting: `rpcServerEnabled`, the "Enable MCP server" box under
   Preferences > AI > MCP. JASP reads it when it starts, so it has to restart once. A backup of JASP's settings
   is kept in Full Fat's own folder, and `full-fat uninstall` puts the old value back.
-- **Approvals.** By default the JASP tools run without asking in both apps, as in JASP's own assistant (every
-  shipped persona has all capabilities). With `--careful`, Claude Code asks before anything that changes JASP,
-  and Codex does the same through its per-tool approval settings (`default_tools_approval_mode = "prompt"`
-  with the reading tools set to `"approve"`, and `approvals_reviewer = "user"` so you answer, not Codex's
-  automatic reviewer). Codex works in a read-only sandbox in this folder.
+- **Which tools ask.** By default the chat uses the JASP tools that JASP's own assistant has (all of them for
+  every shipped persona) without asking. Loading a data file (`data_load`) and recombining results
+  (`analysis_composeResults`) are not part of JASP's assistant, so they ask. With `--careful`, everything that
+  changes JASP asks. In Claude Code, shell commands and file edits are switched off in the chat folder. In
+  Codex, the shell tool is off and the folder is read-only, so Codex asks before it changes a file. Codex uses
+  its documented per-tool approvals (`default_tools_approval_mode`, `tools.<tool>.approval_mode`) with
+  `approvals_reviewer = "user"`, so you answer, not Codex's automatic reviewer
+  ([config reference](https://developers.openai.com/codex/config-reference)).
+- **Models.** With Claude Max the chat starts on Opus. With Pro it uses Claude Code's usual model. Both start at
+  high effort. Codex starts on GPT-6.2 Astra at high effort. If Codex says your plan can't use that model,
+  type `/model` in Codex and pick another one.
 - **Folder trust.** Codex only uses the folder's settings when the folder is trusted, so setup adds a trust
-  entry for the chat folder to `~/.codex/config.toml` (and nothing else). Claude Code has no supported way to
-  do that, so it asks once.
+  entry for the chat folder to `~/.codex/config.toml` (and nothing else), and `full-fat uninstall` removes it
+  again. Claude Code has no supported way to do that, so it asks once.
 - **Tested on** Linux (JASP 0.98.1 Flatpak) with Claude Code and Codex. Windows and macOS are checked only by
-  CI: unit tests, the installers, and a job that installs the real JASP, opens it and talks to it through
-  jasp-mcp. Nobody has tried them on a real Windows PC or Mac yet.
+  CI: unit tests, the installers (with git hidden, as on a new computer), and a job that installs the real JASP,
+  opens it and talks to it through jasp-mcp. Nobody has tried them on a real Windows PC or Mac yet.
 - **Not affiliated with JASP.** Full Fat is not made or endorsed by the JASP team. JASP's prompts are
   downloaded from [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop) (AGPL-3.0) when you
   run setup. The connector is the official [jasp-mcp](https://github.com/jasp-stats/jasp-mcp), pinned to a
