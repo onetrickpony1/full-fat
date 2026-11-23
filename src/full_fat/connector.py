@@ -33,6 +33,14 @@ def archive_gone(url: str, timeout: float = 30) -> bool:
         return False
 
 
+def folder_archive_gone(server: dict) -> bool:
+    """Is the connector archive a chat folder's settings name (`jasp-mcp @ <url>`) gone from GitHub?"""
+    for a in server.get("args") or []:
+        if isinstance(a, str) and a.startswith("jasp-mcp @ "):
+            return archive_gone(a.removeprefix("jasp-mcp @ ").strip())
+    return False
+
+
 def pick_url(gone=None) -> str:
     """The connector archive setup writes into the chat folder: the pinned commit, or main's commit when the
     pinned one can no longer be downloaded (see workspace.JASP_MCP_FALLBACK_SHA)."""

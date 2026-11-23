@@ -631,9 +631,30 @@ def test_setup_falls_back_to_mains_connector_when_the_pinned_one_is_gone(env, mo
     capsys.readouterr()
     cli.main(["doctor", "--dir", str(ws), "--settings-file", str(conf)])
     out = capsys.readouterr().out
-    assert "does not start" in out and "Fix: run full-fat setup again" in out
+    after = out.split("The link between the chat and JASP does not start.")[1].splitlines()[1]
+    assert after.strip() == "Fix: run full-fat setup again"
     monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (True, ""))
     cli.main(setup_args(tmp_path, conf))
     for rel in (".mcp.json", ".codex/config.toml"):
         text = (ws / rel).read_text()
         assert workspace.JASP_MCP_FALLBACK_URL in text and workspace.JASP_MCP_URL not in text
+
+
+def test_doctor_offline_with_a_fallback_folder_explains_the_failure(env, monkeypatch, capsys):
+    # A folder written with main's commit, checked while offline: nothing is "gone", so doctor gives the usual
+    # explanation, not "run setup again" (which would write the same folder).
+    from full_fat import workspace
+    tmp_path, conf = env
+    pretend_uv_is_installed(monkeypatch)
+    monkeypatch.setattr(jasp, "ping", lambda h, p, timeout=3: False)
+    monkeypatch.setattr(cli.connector, "archive_gone", lambda url, timeout=30: url == workspace.JASP_MCP_URL)
+    cli.main(setup_args(tmp_path, conf))
+    ws = tmp_path / "ws"
+    assert workspace.JASP_MCP_FALLBACK_URL in (ws / ".mcp.json").read_text()
+    monkeypatch.setattr(cli.connector, "archive_gone", lambda url, timeout=30: False)  # offline: never "gone"
+    monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (False, "network is unreachable"))
+    capsys.readouterr()
+    cli.main(["doctor", "--dir", str(ws), "--settings-file", str(conf)])
+    out = capsys.readouterr().out
+    after = out.split("The link between the chat and JASP does not start.")[1].splitlines()[1]
+    assert "Check the internet connection" in after and "run full-fat setup again" not in after

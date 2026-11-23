@@ -3,8 +3,16 @@ import pytest
 
 import urllib.request
 
-from full_fat import workspace
+from full_fat import connector, workspace
 from full_fat.prompts import load_prompts
+
+
+@pytest.mark.network
+@pytest.mark.real_connector
+def test_archive_gone_against_github():
+    assert connector.archive_gone(workspace.JASP_MCP_URL) is False
+    assert connector.archive_gone(workspace.JASP_MCP_FALLBACK_URL) is False
+    assert connector.archive_gone(workspace.archive_url("0" * 40)) is True
 
 
 @pytest.mark.network

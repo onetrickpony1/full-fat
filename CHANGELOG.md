@@ -14,8 +14,9 @@
   before it works on an analysis, and again when you say you changed something.
 - **Slow analyses no longer get lost.** The connector gives up on a JASP call after 60 seconds while JASP keeps
   working, and the result was then lost behind an empty error. The assistant now asks for results and data
-  loads in steps of at most 45 seconds and checks again until the analysis is finished, and after an unclear
-  error it reads the analysis instead of running it again or telling you to restart. Codex waits 120 seconds
+  loads in steps of at most 45 seconds. After three checks it tells you the analysis is still running and asks
+  you to send "continue". After an unclear error it reads the analysis instead of running it again or telling
+  you to restart. It also knows that JASP reports a finished analysis as "complete". Codex waits 120 seconds
   for a JASP tool instead of 60.
 - **The assistant calls JASP one step at a time.** JASP turns away a second call while one is still running,
   so calls made side by side failed. When JASP is still busy with an earlier call, the assistant now asks you

@@ -35,12 +35,17 @@ How this setup differs from the chat inside JASP:
   current state with `jasp_get_analyses_state` (it needs `analysisIds`); don't assume you
   know its options. If the user says they changed something, read it again before you act.
 - Keep `timeoutMs` at 45000 or lower, even for slow analyses and data loading, whatever
-  the tool descriptions suggest. If the status is not finished yet (anything other than
-  "complete", "validationError", "fatalError" or "aborted", for example "running",
-  "empty" or "runningImg"), check again with `jasp_analysis_results`. If a call fails
-  after about a minute with an empty or unclear error, the analysis may still be running
-  in JASP: wait, then read it with `jasp_get_analyses_state`, giving its ID and
-  `include_results` true. Don't run it again blindly, and don't tell the user to restart.
+  the tool descriptions suggest. When an analysis is done, JASP says "complete" (not
+  "success", as the tool descriptions say). It is finished when the status is "complete",
+  "validationError" or "fatalError". For anything else, for example "running", "empty" or
+  "runningImg", check again with `jasp_analysis_results`. If it is still not finished
+  after three checks, tell the user it is still working and ask them to send "continue".
+  If the status is "aborted", read it once more with `jasp_get_analyses_state` (JASP
+  usually runs it again), and if it is still aborted, tell the user.
+- If a call fails after about a minute with an empty or unclear error, the analysis may
+  still be running in JASP: wait, then read it with `jasp_get_analyses_state`, giving its
+  ID and `include_results` true. Don't run it again blindly, and don't tell the user to
+  restart.
 - Setting options: start from the analysis's own options and their descriptions
   (`jasp_analysis_create`, or `jasp_get_analyses_state` with `include_descriptions`), not
   from another analysis. Boxes inside a model or tab only accept variables that are already

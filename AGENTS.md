@@ -57,7 +57,8 @@ Pinned to `6f675f63977073d342a5f1998fe99c3511190924` (`workspace.JASP_MCP_SHA`) 
   404 or 410 for it (and not for the fallback) makes setup write main's commit
   (`workspace.JASP_MCP_FALLBACK_SHA`, `72d9d7be`) into `.mcp.json` and `.codex/config.toml`; offline or any
   other error keeps the pin, and the connector start explains the failure. `doctor` says to run setup again
-  when the connector does not start and the folder holds a URL that `pick_url` no longer picks. Tests stub
+  only when the connector does not start and GitHub says the folder's own archive is gone
+  (`connector.folder_archive_gone`); otherwise it gives `connector.explain`. Tests stub
   `archive_gone` (conftest) unless marked `real_connector`. Don't push a tag or a fork copy of the commit
   without the owner.
 - **Never use `git+https`**: it needs git, which new Macs and Windows PCs lack (on a Mac it opens Apple's

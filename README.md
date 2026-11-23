@@ -309,8 +309,8 @@ window it ran in.
   - The assistant is rarely told about changes you make in JASP's own window, so it reads JASP's current state
     before it works on an analysis.
   - jasp-mcp gives up on a call after 60 seconds, with no setting to change that, while JASP keeps working. The
-    assistant asks for results in steps of 45 seconds at most and checks again, and after an unclear error it
-    reads the results again instead of starting over. Codex is told to wait 120 seconds for a JASP tool, longer
+    assistant asks for results in steps of 45 seconds at most. After three checks it asks you to send
+    "continue", and after an unclear error it reads the analysis again instead of starting over. Codex is told to wait 120 seconds for a JASP tool, longer
     than its usual 60.
   - Boxes inside a model (for example Independent X and Moderator W in a Process model) are emptied without an
     error when they are set in the same call as the main variable boxes they pick from. The assistant sets the

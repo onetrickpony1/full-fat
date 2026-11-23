@@ -261,9 +261,13 @@ def test_guidance_on_one_call_at_a_time_state_and_slow_calls():
     assert "get its ID from `jasp_analyses_list`" in env and "(it needs `analysisIds`)" in env
     assert "If the user says they changed something, read it again before you act." in env
     assert "Keep `timeoutMs` at 45000 or lower, even for slow analyses and data loading" in env
-    # status names from Desktop/analysis/analysis.cpp statusToString (v0.99.0)
-    for status in ("complete", "validationError", "fatalError", "aborted", "running", "empty", "runningImg"):
+    # status names from Desktop/analysis/analysis.cpp statusToString; finished = analysis.h isFinished (v0.99.0)
+    assert 'finished when the status is "complete", "validationError" or "fatalError"' in env
+    for status in ("running", "empty", "runningImg", "aborted"):
         assert f'"{status}"' in env
+    assert 'JASP says "complete" (not "success"' in env
+    assert 'after three checks, tell the user it is still working and ask them to send "continue"' in env
+    assert 'If the status is "aborted", read it once more with `jasp_get_analyses_state`' in env
     assert "check again with `jasp_analysis_results`" in env
     assert "read it with `jasp_get_analyses_state`, giving its ID and `include_results` true" in env
     assert "Don't run it again blindly, and don't tell the user to restart." in env

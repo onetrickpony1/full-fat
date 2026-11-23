@@ -698,7 +698,7 @@ def cmd_doctor(a, ui: UI) -> int:
             ok, detail = False, str(e)
         if ok:
             ui.ok("The link between the chat and JASP starts.")
-        elif connector.pick_url() not in str(server.get("args")):
+        elif connector.folder_archive_gone(server):
             # the folder's connector can no longer be downloaded; setup writes one that can
             bad("The link between the chat and JASP does not start.", "run full-fat setup again")
         else:
