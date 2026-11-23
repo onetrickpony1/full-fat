@@ -35,3 +35,13 @@
 - **The chat lives in a "Full Fat" folder in your home folder.** Use `--dir` to put it somewhere else.
 - **Safe to run again.** It updates the chat folder without deleting anything you added, and keeps your own
   version of any file it would replace.
+- **ChatGPT chats can open in the ChatGPT app.** Before, a ChatGPT chat always started in a Terminal window.
+  Now, if the ChatGPT app is installed, setup suggests it, and the icon opens JASP and then a new chat on the
+  app's Codex side in the chat folder, with the first message typed in. If the app is missing or doesn't open,
+  the chat starts in the Terminal as before. `--open-in terminal` keeps the Terminal.
+
+### Fixes
+- **Codex chats in the ChatGPT app start at high effort and without the app's extra tools.** Before, a chat
+  in the app ran at the effort saved in your own Codex settings (often medium) and could use the app's tools
+  for running code, reading any file, the computer, the browser and connected apps. Now the chat folder's
+  settings start every Codex chat at high effort and switch those tools off.

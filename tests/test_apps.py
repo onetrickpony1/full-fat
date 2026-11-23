@@ -1,4 +1,6 @@
+import subprocess
 import tomllib
+from pathlib import Path
 
 from full_fat import apps
 
@@ -137,3 +139,129 @@ def test_connector_failures_are_explained():
         "error: Failed to build `cryptography==50.0.2`")
     assert "internet" in connector.explain("error: Failed to fetch: dns error")
     assert "internet" not in connector.explain("Something odd")
+
+
+# ---------------------------------------------------------------------------- the ChatGPT desktop app
+
+def test_deep_link_encodes_the_folder_and_prompt():
+    from urllib.parse import parse_qs, urlsplit
+    url = apps.deep_link(Path("/Users/me/Full Fat"), "Give a short introduction.")
+    assert url.startswith("codex://threads/new?")
+    assert " " not in url and "+" not in url
+    assert "path=%2FUsers%2Fme%2FFull%20Fat&" in url and "mode=codex" in url
+    q = parse_qs(urlsplit(url).query)
+    assert q == {"path": ["/Users/me/Full Fat"], "mode": ["codex"], "prompt": ["Give a short introduction."]}
+    win = parse_qs(urlsplit(apps.deep_link(Path(r"C:\Users\Me & You\Full Fat"), "a&b=c")).query)
+    assert win["path"] == [str(Path(r"C:\Users\Me & You\Full Fat"))] and win["prompt"] == ["a&b=c"]
+
+
+def test_desktop_app_found_env(monkeypatch):
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "none")
+    assert apps.desktop_app_found() is False
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    assert apps.desktop_app_found() is True
+
+
+def test_desktop_app_found_linux(monkeypatch):
+    monkeypatch.delenv("FULL_FAT_CHATGPT_APP")
+    out = {"stdout": "chatgpt.desktop\n", "rc": 0}
+
+    def run(cmd, **kw):
+        assert cmd == ["xdg-mime", "query", "default", "x-scheme-handler/codex"]
+        return subprocess.CompletedProcess(cmd, out["rc"], out["stdout"], "")
+    monkeypatch.setattr(apps.subprocess, "run", run)
+    assert apps.desktop_app_found("linux")
+    out["stdout"] = ""
+    assert not apps.desktop_app_found("linux")
+
+
+def test_desktop_app_found_mac(tmp_path, monkeypatch):
+    import plistlib
+    monkeypatch.delenv("FULL_FAT_CHATGPT_APP")
+    apps_dir = tmp_path / "Applications"
+    monkeypatch.setattr(apps, "MAC_APP_DIRS", (str(apps_dir),))
+    monkeypatch.setattr(apps, "_mac_handler", lambda: False)
+    assert not apps.desktop_app_found("darwin")
+    old = apps_dir / "ChatGPT.app" / "Contents"  # an older ChatGPT app without the Codex side
+    old.mkdir(parents=True)
+    (old / "Info.plist").write_bytes(plistlib.dumps({"CFBundleURLTypes": [{"CFBundleURLSchemes": ["chatgpt"]}]}))
+    assert not apps.desktop_app_found("darwin")
+    (old / "Info.plist").write_bytes(plistlib.dumps(
+        {"CFBundleURLTypes": [{"CFBundleURLSchemes": ["chatgpt"]}, {"CFBundleURLSchemes": ["codex"]}]}))
+    assert apps.desktop_app_found("darwin")
+    (old / "Info.plist").write_bytes(b"not a plist")
+    assert not apps.desktop_app_found("darwin")
+    monkeypatch.setattr(apps, "_mac_handler", lambda: True)  # the app lives somewhere else
+    assert apps.desktop_app_found("darwin")
+
+
+def test_open_desktop_app(monkeypatch):
+    seen = []
+
+    class P:
+        def __init__(self, cmd, **kw):
+            seen.append(cmd)
+            self.rc = 0 if "good" in cmd[1] else 1
+            assert kw.get("start_new_session")
+
+        def wait(self, timeout=None):
+            if "slow" in seen[-1][1]:
+                raise subprocess.TimeoutExpired(seen[-1], timeout)
+            return self.rc
+    monkeypatch.setattr(apps.subprocess, "Popen", P)
+    assert apps.open_desktop_app("codex://good", "darwin") and seen[-1] == ["open", "codex://good"]
+    assert apps.open_desktop_app("codex://good", "linux") and seen[-1] == ["xdg-open", "codex://good"]
+    assert not apps.open_desktop_app("codex://bad", "linux")
+    assert apps.open_desktop_app("codex://slow", "linux")
+
+    def boom(cmd, **kw):
+        raise FileNotFoundError(cmd[0])
+    monkeypatch.setattr(apps.subprocess, "Popen", boom)
+    assert not apps.open_desktop_app("codex://good", "linux")
+
+
+def test_desktop_app_found_windows(monkeypatch):
+    import sys
+    import types
+    monkeypatch.delenv("FULL_FAT_CHATGPT_APP")
+    keys = {}
+
+    class Key:
+        def __init__(self, name):
+            self.name = name
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def open_key(root, name):
+        if (root, name) not in keys:
+            raise FileNotFoundError(name)
+        return Key(name)
+
+    def query(k, value):
+        if value != "URL Protocol":
+            raise FileNotFoundError(value)
+        return ("", 1)
+    fake = types.SimpleNamespace(HKEY_CURRENT_USER="HKCU", HKEY_CLASSES_ROOT="HKCR", OpenKey=open_key,
+                                 QueryValueEx=query)
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    assert not apps.desktop_app_found("win32")
+    keys[("HKCR", "codex")] = True
+    assert apps.desktop_app_found("win32")
+    keys.clear()
+    keys[("HKCU", r"Software\Classes\codex")] = True
+    assert apps.desktop_app_found("win32")
+
+
+def test_open_desktop_app_windows(monkeypatch):
+    seen = []
+    monkeypatch.setattr(apps.os, "startfile", seen.append, raising=False)
+    assert apps.open_desktop_app("codex://x", "win32") and seen == ["codex://x"]
+
+    def no_app(url):
+        raise OSError("No application is associated")
+    monkeypatch.setattr(apps.os, "startfile", no_app, raising=False)
+    assert not apps.open_desktop_app("codex://x", "win32")

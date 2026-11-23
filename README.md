@@ -61,6 +61,8 @@ Start a chat now? [Y/n]
   greeting that says what you can ask.
 - **Top model at high effort from the start**: Claude Opus in Claude Code, GPT-6.2 Astra in Codex. A model
   you pick with `/model` and save as your default is kept for the next chats.
+- **ChatGPT in the ChatGPT app.** If the app is installed, ChatGPT chats open on its Codex side instead of in
+  a Terminal window, with the same JASP tools and the same rules. The Terminal stays as the fallback.
 - **Analyses without asking, the rest asks first.** Creating and running analyses and reading results run
   without asking, as in JASP's own assistant. Writing a report or an annotation, recombining results and
   loading a data file ask first. `--careful` makes it ask before every change to JASP.
@@ -121,11 +123,28 @@ Running the same line again updates Full Fat and runs the setup again.
 
 Close the window when you are done. Everything the chat creates is in JASP's results.
 
+### ChatGPT in the ChatGPT app
+
+If you pay for ChatGPT and the ChatGPT app is installed on your computer, setup asks where you want to chat
+and suggests the app. Then the "Full Fat" icon opens JASP and, once JASP is connected, opens the ChatGPT app
+with a new chat on its Codex side, in the chat folder.
+
+- The first time, the app may ask you to sign in. Sign in with your ChatGPT account.
+- The first message is already typed in for you. Press Enter to send it, and the chat says hello.
+- You can close the Terminal window once the app is open. JASP stays open and connected.
+- To change the model or the effort, use the picker under the message box.
+- If the app can't be found or doesn't open, the chat starts in the Terminal instead, as before.
+
+The app's own "Approve for me" setting can let its automatic reviewer answer approval questions for you. In
+the Terminal, you always answer them yourself. To chat in the Terminal for good, run
+`full-fat setup --open-in terminal`. For one chat, run `full-fat launch --open-in terminal`.
+
 ### Commands
 
 ```
 full-fat                  set up, or update (same as full-fat setup)
 full-fat launch           open JASP connected, then start the chat (the icon runs this)
+                          --open-in app|terminal: where a ChatGPT chat opens this time
 full-fat doctor           check everything and say how to fix problems
 full-fat uninstall        remove the icon and Full Fat's files, put JASP's setting back
 ```
@@ -140,6 +159,7 @@ Setup options:
 --jasp-version X.Y.Z      use these JASP instructions instead of the installed version's
 --yes                     ask nothing and never wait (for scripts); never installs the chat apps
 --install-apps            install Claude Code or Codex without asking, also with --yes
+--open-in app|terminal    ChatGPT chats: in the ChatGPT app (the default when it is installed) or the Terminal
 --no-install-apps, --no-sign-in, --no-launcher, --no-trust, --no-start
 ```
 
@@ -175,7 +195,17 @@ window it ran in.
   so you answer, not Codex's automatic reviewer
   ([config reference](https://developers.openai.com/codex/config-reference)). Codex can still look at image
   files (its `view_image` tool, which it needs to see JASP's plots): its settings can switch that on or off,
-  but not limit it to some folders.
+  but not limit it to some folders. The ChatGPT app adds tools of its own: one that runs code and reads any
+  file (`node_repl`), using the computer, the browser, Chrome, and connected apps. The folder's settings switch
+  them off (`[mcp_servers.node_repl] enabled = false`, `[plugins."..."] enabled = false`,
+  `features.apps = false`). In the app, "Approve for me" uses the app's automatic reviewer, which can answer
+  approval questions instead of you even with `approvals_reviewer = "user"`.
+- **The ChatGPT app.** Full Fat looks for it as an app that opens `codex://` links: on macOS ChatGPT.app or
+  Codex.app in Applications (or whichever app macOS has for those links), on Windows the `codex` link entry in
+  the registry, on Linux `xdg-mime query default x-scheme-handler/codex`. It opens
+  `codex://threads/new?path=<chat folder>&mode=codex&prompt=<first message>` with `open`, `os.startfile` or
+  `xdg-open`, after JASP is connected and its setting is off again. `FULL_FAT_CHATGPT_APP=none` makes Full Fat
+  act as if the app is not installed.
 - **Models.** The icon starts the chat on Opus (Claude Code) or GPT-6.2 Astra (Codex) at high effort, by
   passing them when it starts the app. It leaves them out when your own settings already choose a model or
   an effort: when you pick a model with `/model` in Claude Code, Claude saves it as your default, and the
@@ -183,11 +213,16 @@ window it ran in.
   chat folder's own settings don't set a model, so they never override yours. High effort on the top model
   uses a plan's limits faster: if you hit your limit, type `/model` to pick a lighter model or `/effort` to
   lower the effort. If Codex says your plan can't use its model, type `/model` and pick another one.
+  Codex's effort is set to high in the chat folder's own settings, because the ChatGPT app starts chats
+  without the icon's options. That setting wins over an effort saved in your own Codex settings, so every
+  Codex chat in the folder starts at high effort. `/model`, or the picker under the message box in the app,
+  changes it for that chat.
 - **Folder trust.** Codex only uses the folder's settings when the folder is trusted, so setup adds a trust
   entry for the chat folder to `~/.codex/config.toml` (and nothing else), and `full-fat uninstall` removes it
   again. Claude Code has no supported way to do that, so it asks once. Its question starts on "No, exit":
   press the Down arrow, then Enter.
-- **Tested on** Linux (JASP 0.98.1 Flatpak) with Claude Code and Codex. Nobody has tried Full Fat on a real
+- **Tested on** Linux (JASP 0.98.1 Flatpak) with Claude Code and Codex, and with the ChatGPT app 26.1111 for
+  Linux. Nobody has tried Full Fat on a real
   Windows PC or Mac yet. What CI checks, on every push:
   - unit tests on Linux, macOS and Windows (Python 3.11 and the newest);
   - the install lines (`install.sh`, `install.ps1`, from the checked-out code, not the published link), with

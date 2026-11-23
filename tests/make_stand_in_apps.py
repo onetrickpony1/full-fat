@@ -24,6 +24,7 @@ def main() -> int:
                          f'{{ pwd; echo "$@"; }} >> "{log}"\n')
             p.chmod(0o755)
         print(f"FULL_FAT_{name.upper()}={p}")
+    print("FULL_FAT_CHATGPT_APP=none")  # the stand-in Codex starts in the Terminal, never a real ChatGPT app
     return 0
 
 

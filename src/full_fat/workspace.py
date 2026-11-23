@@ -153,6 +153,11 @@ CODEX_MODEL = "gpt-6.2-astra"
 CODEX_EFFORT = "high"
 
 
+# The ChatGPT app's own plugins that work the computer or a browser (names from chatgpt-bin 26.1111's
+# ~/.codex/config.toml). An entry for a plugin that isn't installed is ignored (checked with Codex 0.169).
+DESKTOP_PLUGINS_OFF = ["unified-computer-use@openai-bundled", "browser@openai-bundled", "chrome@openai-bundled"]
+
+
 def run_tools(careful: bool) -> list[str]:
     """The JASP tools that run without asking."""
     return list(READ_ONLY_TOOLS if careful else DEFAULT_TOOLS)
@@ -161,9 +166,13 @@ def run_tools(careful: bool) -> list[str]:
 def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
     args = ", ".join(json.dumps(a) for a in UVX_ARGS)
     lines = [
-        "# Full Fat: Codex settings for this folder (used once you trust the folder).",
-        "# The model and effort are not set here, so /model can change them for good: the Full Fat icon starts",
-        f"# Codex on {CODEX_MODEL} at {CODEX_EFFORT} effort unless your own Codex settings choose others.",
+        "# Full Fat: Codex settings for this folder (used once you trust the folder). The Codex side of the",
+        "# ChatGPT app uses them too.",
+        "# The model is not set here, so a model you pick with /model is kept: the Full Fat icon starts Codex",
+        f"# on {CODEX_MODEL} unless your own Codex settings choose another.",
+        f"# Each chat starts at {CODEX_EFFORT} effort. /model (or the picker under the message box in the app)",
+        "# changes it for that chat.",
+        f'model_reasoning_effort = "{CODEX_EFFORT}"',
         "# Codex may read files but not change them or run programs that change things.",
         'sandbox_mode = "read-only"',
         "# Codex asks you before anything outside that.",
@@ -174,6 +183,8 @@ def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
         'web_search = "disabled"',
         "# You answer approval questions yourself, not Codex's automatic reviewer.",
         'approvals_reviewer = "user"',
+        "# No connected apps (the ChatGPT app's connectors).",
+        "features.apps = false",
     ]
     lines += [
         "",
@@ -189,6 +200,16 @@ def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
     lines += ['default_tools_approval_mode = "prompt"']
     for t in run_tools(careful):
         lines += ["", f"[mcp_servers.jasp.tools.{t}]", 'approval_mode = "approve"']
+    lines += [
+        "",
+        "# The ChatGPT app adds tools that can read any file or work the computer and the browser. They are off",
+        "# in this folder. node_repl needs a command to be valid where the app is not installed; it never runs.",
+        "[mcp_servers.node_repl]",
+        'command = "node_repl"',
+        "enabled = false",
+    ]
+    for plugin in DESKTOP_PLUGINS_OFF:
+        lines += ["", f'[plugins."{plugin}"]', "enabled = false"]
     return "\n".join(lines) + "\n"
 
 

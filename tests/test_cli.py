@@ -298,6 +298,140 @@ def test_launch_starts_the_chat(env, monkeypatch):
     assert "rpcServerEnabled" not in conf.read_text()
 
 
+def launch_world(env, monkeypatch, *setup_extra):
+    tmp_path, conf = env
+    assert cli.main(setup_args(tmp_path, conf, *setup_extra)) == 0
+    w = World(conf)
+    monkeypatch.setattr(jasp, "open_jasp", w.open)
+    monkeypatch.setattr(jasp, "ping", w.ping)
+    monkeypatch.setattr(jasp, "running", w.running)
+    monkeypatch.setattr(apps, "signed_in", lambda app, exe: True)
+    seen = {}
+    monkeypatch.setattr(cli.os, "execv", lambda exe, cmd: seen.update(cmd=cmd))
+    monkeypatch.setattr(cli, "real_terminal_input", lambda: None)
+    monkeypatch.setattr(cli.os, "chdir", lambda d: seen.update(cwd=d))
+    return w, seen
+
+
+def app_setup_args(tmp_path, conf):
+    return [a if a != "claude" else "codex" for a in setup_args(tmp_path, conf)]
+
+
+def test_setup_picks_the_chatgpt_app_when_it_is_installed(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")  # Codex for the Terminal is not installed (env fixture)
+    assert cli.main(app_setup_args(tmp_path, conf)) == 0  # done, without Codex for the Terminal
+    assert state.load()["chatgpt_in"] == "app"
+    out = " ".join(capsys.readouterr().out.split())
+    assert "ChatGPT chats open in the ChatGPT app" in out and "Codex side" in out and "sign in" in out
+    assert "close the Terminal window" in out and "picker under the message box" in out
+    assert "Press Enter to send it" in out
+    assert "Codex may show a welcome screen" not in out
+    assert "Codex.app" not in out and "config" not in out.lower().replace("configur", "")
+
+
+def test_setup_keeps_the_terminal_without_the_app(env, monkeypatch):
+    tmp_path, conf = env
+    fake = tmp_path / "bin" / "codex"
+    fake.write_text("")
+    monkeypatch.setenv("FULL_FAT_CODEX", str(fake))
+    assert cli.main(app_setup_args(tmp_path, conf)) == 0
+    assert state.load()["chatgpt_in"] == "terminal"
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    assert cli.main(app_setup_args(tmp_path, conf) + ["--open-in", "terminal"]) == 0
+    assert state.load()["chatgpt_in"] == "terminal"
+
+
+def test_setup_asks_where_and_defaults_to_the_app(env, monkeypatch):
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    asked = []
+
+    def inp(prompt):
+        asked.append(prompt)
+        return ""
+    a = cli.parser().parse_args(["setup"])
+    assert cli.chatgpt_place(a, {}, UI(inp=inp)) == "app" and asked
+    assert cli.chatgpt_place(a, {}, UI(inp=lambda p: "2")) == "terminal"
+    assert cli.chatgpt_place(a, {"chatgpt_in": "terminal"}, UI(yes=True)) == "terminal"
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "none")
+    assert cli.chatgpt_place(a, {}, UI(inp=inp)) == "terminal"
+
+
+def test_launch_opens_the_chatgpt_app_after_switching_the_setting_off(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    w, seen = launch_world(env, monkeypatch)
+    state.save({"apps": ["codex"], "chatgpt_in": "app"})
+    opened = []
+
+    def open_app(url):
+        assert "rpcServerEnabled" not in conf.read_text()  # off on disk before the app opens
+        opened.append(url)
+        return True
+    monkeypatch.setattr(apps, "open_desktop_app", open_app)
+    assert cli.main(["launch", "--yes"]) == 0
+    assert w.starts == [True] and opened == [apps.deep_link(tmp_path / "ws", prompts.INTRO_MESSAGE)]
+    assert "cmd" not in seen  # no Terminal chat
+    out = " ".join(capsys.readouterr().out.split())
+    assert "opening a new chat on its Codex side" in out and "close the Terminal window" in out
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows runs the chat app with subprocess instead of exec")
+def test_launch_falls_back_to_the_terminal_when_the_app_does_not_open(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    fake = tmp_path / "bin" / "codex"
+    fake.write_text("")
+    monkeypatch.setenv("FULL_FAT_CODEX", str(fake))
+    w, seen = launch_world(env, monkeypatch)
+    state.save({"apps": ["codex"], "chatgpt_in": "app"})
+    monkeypatch.setattr(apps, "open_desktop_app", lambda url: False)
+    assert cli.main(["launch", "--yes"]) == 0
+    assert "did not open, so the chat starts here in the Terminal" in " ".join(capsys.readouterr().out.split())
+    assert seen["cmd"][0] == str(fake) and seen["cmd"][-1] == prompts.INTRO_MESSAGE
+    assert w.starts == [True] and "rpcServerEnabled" not in conf.read_text()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows runs the chat app with subprocess instead of exec")
+def test_launch_uses_the_terminal_when_the_app_is_gone(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    fake = tmp_path / "bin" / "codex"
+    fake.write_text("")
+    monkeypatch.setenv("FULL_FAT_CODEX", str(fake))
+    w, seen = launch_world(env, monkeypatch)
+    state.save({"apps": ["codex"], "chatgpt_in": "app"})  # FULL_FAT_CHATGPT_APP=none: the app was removed
+    monkeypatch.setattr(apps, "open_desktop_app", lambda url: pytest.fail("tried to open a missing app"))
+    assert cli.main(["launch", "--yes"]) == 0
+    assert "could not find the ChatGPT app" in capsys.readouterr().out
+    assert seen["cmd"][0] == str(fake)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows runs the chat app with subprocess instead of exec")
+def test_launch_open_in_terminal_overrides_the_app(env, monkeypatch):
+    tmp_path, conf = env
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    fake = tmp_path / "bin" / "codex"
+    fake.write_text("")
+    monkeypatch.setenv("FULL_FAT_CODEX", str(fake))
+    w, seen = launch_world(env, monkeypatch)
+    state.save({"apps": ["codex"], "chatgpt_in": "app"})
+    monkeypatch.setattr(apps, "open_desktop_app", lambda url: pytest.fail("opened the app"))
+    assert cli.main(["launch", "--yes", "--open-in", "terminal"]) == 0
+    assert seen["cmd"][0] == str(fake)
+
+
+def test_doctor_checks_the_app_instead_of_terminal_codex(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    monkeypatch.setattr(jasp, "ping", lambda h, p, timeout=3: False)
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
+    cli.main(app_setup_args(tmp_path, conf))
+    capsys.readouterr()
+    assert cli.main(["doctor", "--dir", str(tmp_path / "ws"), "--settings-file", str(conf)]) == 0
+    assert "The ChatGPT app is installed" in capsys.readouterr().out
+    monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "none")
+    assert cli.main(["doctor", "--dir", str(tmp_path / "ws"), "--settings-file", str(conf)]) == 1
+
+
 # ---------------------------------------------------------------------------- doctor
 
 def test_doctor_reports(env, capsys, monkeypatch):

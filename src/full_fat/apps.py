@@ -1,4 +1,4 @@
-"""The AI apps: Claude Code and Codex CLI. Finding, installing, sign-in and folder trust.
+"""The AI apps: Claude Code and Codex CLI (finding, installing, sign-in, folder trust) and the ChatGPT desktop app.
 
 Install commands are the providers' official ones (checked 2026-11-22):
 - Claude Code, https://code.claude.com/docs/en/setup: `curl -fsSL https://claude.ai/install.sh | bash`
@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -281,3 +282,107 @@ def launch_command(app: App, exe: str, intro: str, folder: Path | None = None) -
         if "model_reasoning_effort" not in have:
             cmd += ["-c", f'model_reasoning_effort="{workspace.CODEX_EFFORT}"']
     return cmd + [intro]
+
+
+# ---------------------------------------------------------------------------- the ChatGPT desktop app
+#
+# The ChatGPT desktop app (macOS, Windows, Linux) has a ChatGPT side and a Codex side. Only the Codex side uses the
+# chat folder's .codex/config.toml and AGENTS.md (checked with chatgpt-bin 26.1111 and its bundled Codex 0.169 on
+# Linux). The app keeps Codex's codex:// link for compatibility; codex://threads/new opens a new chat, `path` (an
+# absolute folder) is the folder it works in and `prompt` the first message
+# (https://learn.chatgpt.com/docs/reference/commands). `mode=codex` opens it on the Codex side.
+
+DESKTOP_APP = "the ChatGPT app"
+MAC_APP_DIRS = ("/Applications", "~/Applications")
+MAC_APP_NAMES = ("ChatGPT.app", "Codex.app")
+
+
+def deep_link(folder: Path, prompt: str) -> str:
+    """The link that opens a new chat on the app's Codex side in folder, with prompt as its first message.
+    Everything is percent-encoded, so a space ("Full Fat") becomes %20 and never a +."""
+    from urllib.parse import quote  # noqa: PLC0415
+    params = {"path": str(folder), "mode": "codex", "prompt": prompt}
+    return "codex://threads/new?" + "&".join(f"{k}={quote(v, safe='')}" for k, v in params.items())
+
+
+def _mac_bundle_has_codex_link(bundle: Path) -> bool:
+    import plistlib  # noqa: PLC0415
+    try:
+        with open(bundle / "Contents" / "Info.plist", "rb") as f:
+            info = plistlib.load(f)
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return False
+    for t in info.get("CFBundleURLTypes") or []:
+        if isinstance(t, dict) and "codex" in [str(s).lower() for s in t.get("CFBundleURLSchemes") or []]:
+            return True
+    return False
+
+
+def _mac_handler() -> bool:
+    """Ask macOS which app opens codex:// links (the app may live somewhere other than /Applications)."""
+    script = ('ObjC.import("AppKit"); var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL('
+              '$.NSURL.URLWithString("codex://threads/new")); u.isNil() ? "" : u.path.js')
+    try:
+        r = subprocess.run(["osascript", "-l", "JavaScript", "-e", script], capture_output=True, text=True,
+                           timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0 and r.stdout.strip().endswith(".app")
+
+
+def _linux_handler() -> bool:
+    try:
+        r = subprocess.run(["xdg-mime", "query", "default", "x-scheme-handler/codex"], capture_output=True,
+                           text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0 and bool(r.stdout.strip())
+
+
+def _windows_handler() -> bool:
+    try:
+        import winreg  # noqa: PLC0415
+    except ImportError:
+        return False
+    for root, key in ((winreg.HKEY_CURRENT_USER, r"Software\Classes\codex"), (winreg.HKEY_CLASSES_ROOT, "codex")):
+        try:
+            with winreg.OpenKey(root, key) as k:
+                winreg.QueryValueEx(k, "URL Protocol")
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def desktop_app_found(platform: str | None = None) -> bool:
+    """Is a ChatGPT desktop app installed that opens codex:// links? FULL_FAT_CHATGPT_APP=none says no (tests,
+    CI, or to keep the chat in the Terminal), any other value yes."""
+    env = os.environ.get("FULL_FAT_CHATGPT_APP")
+    if env:
+        return env.lower() not in ("none", "0", "no")
+    platform = platform or sys.platform
+    if platform == "darwin":
+        bundles = [Path(d).expanduser() / n for d in MAC_APP_DIRS for n in MAC_APP_NAMES]
+        return any(_mac_bundle_has_codex_link(b) for b in bundles if b.is_dir()) or _mac_handler()
+    if platform.startswith("win"):
+        return _windows_handler()
+    return _linux_handler()
+
+
+def open_desktop_app(url: str, platform: str | None = None, wait: float = 20) -> bool:
+    """Hand the link to the system, which opens the app. False when that fails (no app takes the link)."""
+    platform = platform or sys.platform
+    try:
+        if platform.startswith("win"):
+            os.startfile(url)  # type: ignore[attr-defined]  # raises OSError when no app takes the link
+            return True
+        cmd = ["open", url] if platform == "darwin" else ["xdg-open", url]
+        # its own session, so closing the Terminal window afterwards can't stop the app
+        p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+    except (OSError, AttributeError):
+        return False
+    try:
+        return p.wait(timeout=wait) == 0
+    except subprocess.TimeoutExpired:
+        return True  # still handing the link over (some systems wait for the app): it was accepted

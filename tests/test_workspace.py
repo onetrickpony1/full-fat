@@ -55,7 +55,14 @@ def test_mcp_and_codex(tmp_path, p):
     assert not any("git+" in a for a in mcp["args"])
     assert mcp["env"] == {"JASP_RPC_URL": "http://127.0.0.1:48164/rpc"}
     codex = tomllib.loads((tmp_path / ".codex/config.toml").read_text())
-    assert "model" not in codex and "model_reasoning_effort" not in codex  # so /model lasts
+    assert "model" not in codex  # so a model picked with /model lasts
+    assert codex["model_reasoning_effort"] == "high"  # the ChatGPT app gets no effort flag, so the folder sets it
+    # the ChatGPT app's extra tools are off; node_repl has a command so the file loads where the app is missing
+    assert codex["mcp_servers"]["node_repl"] == {"command": "node_repl", "enabled": False}
+    assert codex["features"]["apps"] is False
+    assert {k: v["enabled"] for k, v in codex["plugins"].items()} == {
+        "unified-computer-use@openai-bundled": False, "browser@openai-bundled": False,
+        "chrome@openai-bundled": False}
     assert codex["sandbox_mode"] == "read-only" and codex["features"]["shell_tool"] is False
     assert codex["approvals_reviewer"] == "user" and codex["approval_policy"] == "on-request"
     assert codex["web_search"] == "disabled"

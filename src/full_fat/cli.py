@@ -92,6 +92,20 @@ def chosen_apps(a, st: dict, ui: UI) -> list[str]:
     return [["claude"], ["codex"], ["claude", "codex"]][n - 1]
 
 
+def chatgpt_place(a, st: dict, ui: UI) -> str:
+    """Where a ChatGPT chat opens: "app" (the Codex side of the ChatGPT desktop app) or "terminal" (Codex)."""
+    if getattr(a, "open_in", None):
+        return a.open_in
+    if not apps.desktop_app_found():
+        return "terminal"
+    default = st.get("chatgpt_in") or "app"
+    if ui.yes:
+        return default
+    n = ui.choose("The ChatGPT app is installed on this computer. Where do you want to chat with ChatGPT?",
+                  ["In the ChatGPT app", "In a Terminal window like this one"], 1 if default == "app" else 2)
+    return "app" if n == 1 else "terminal"
+
+
 def ensure_app(app: apps.App, ui: UI, may_install: bool, may_sign_in: bool, agreed: bool = False) -> str | None:
     """agreed: install without asking (--install-apps). Otherwise only a person's yes installs anything."""
     exe = apps.find(app)
@@ -196,8 +210,13 @@ def cmd_setup(a, ui: UI) -> int:
 
     ui.heading("Chat app")
     keys = chosen_apps(a, st, ui)
+    place = chatgpt_place(a, st, ui) if "codex" in keys else st.get("chatgpt_in")
     exes = {}
     for k in keys:
+        if k == "codex" and place == "app":  # the app brings its own Codex and its own sign-in
+            ui.ok("ChatGPT chats open in the ChatGPT app.")
+            exes[k] = "app"
+            continue
         exe = ensure_app(apps.APPS[k], ui, may_install=not a.no_install_apps, may_sign_in=not a.no_sign_in,
                          agreed=a.install_apps)
         if exe:
@@ -257,7 +276,7 @@ def cmd_setup(a, ui: UI) -> int:
         old_launchers = [x for x in old_launchers if not remove_launcher(x, ui)]
     state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful,
                 "launchers": launchers + old_launchers, "settings_file": a.settings_file,
-                "jasp_version": j.version})
+                "jasp_version": j.version, "chatgpt_in": place or "terminal"})
 
     if not exes:
         ui.heading("Not finished")
@@ -273,7 +292,7 @@ def cmd_setup(a, ui: UI) -> int:
         ui.say(f"  (or, in this window: {keep(launcher.shell_command(launcher.full_fat_command() + ['launch']))})")
     ui.say("  Full Fat opens JASP for you. If JASP is already open, it may ask you to close it first, so save your "
            "work in JASP before you start.")
-    first_run_notes(list(exes), ui)
+    first_run_notes(list(exes), ui, app_route=place == "app")
     if not connector_ok:
         return 1
     if not ui.yes and not a.no_start and ui.yes_no("Start a chat now?", True, on_eof=False):
@@ -282,13 +301,20 @@ def cmd_setup(a, ui: UI) -> int:
     return 0
 
 
-def first_run_notes(keys: list[str], ui: UI) -> None:
-    ui.say("The first time you start a chat:")
-    if "claude" in keys:
+def first_run_notes(keys: list[str], ui: UI, app_route: bool = False) -> None:
+    if "codex" in keys and app_route:
+        ui.say("ChatGPT chats open in the ChatGPT app:")
+        for line in APP_NOTES:
+            ui.say("  - " + line)
+    terminal = [k for k in keys if k == "claude" or not app_route]
+    if not terminal:
+        return
+    ui.say("The first time you start a chat in the Terminal:")
+    if "claude" in terminal:
         ui.say("  - Claude shows a few welcome screens (for example a choice of colours). Press Enter on each.")
         ui.say('  - Claude asks whether you trust the chat folder. Press the Down arrow once, so that "Yes, I trust '
                'this folder" is picked, then press Enter. (Enter alone picks "No, exit".)')
-    if "codex" in keys:
+    if "codex" in terminal:
         ui.say("  - Codex may show a welcome screen or ask about the folder. Choose the first option and press Enter.")
     ui.say("  - Before the chat loads a data file, or writes a report or an annotation into JASP, it asks you. To "
            'let it, choose the first option ("Yes" in Claude, "Allow" in ChatGPT) and press Enter.')
@@ -298,6 +324,16 @@ def first_run_notes(keys: list[str], ui: UI) -> None:
 
 
 # ---------------------------------------------------------------------------- launch
+
+APP_NOTES = [
+    "Full Fat opens JASP, then the ChatGPT app with a new chat on its Codex side, in the chat folder.",
+    "The first time, the app may ask you to sign in. Sign in with your ChatGPT account.",
+    "The first message is already typed in for you. Press Enter to send it, and the chat says hello.",
+    "If the app asks before it loads a data file, or writes a report or an annotation into JASP, choose Allow.",
+    "To change the model or the effort, use the picker under the message box.",
+    "Once the app is open, you can close the Terminal window. JASP stays open and connected.",
+]
+
 
 def _workspace_from(a, st: dict) -> Path:
     return Path(a.dir or st.get("dir") or state.default_workspace()).expanduser().absolute()
@@ -390,18 +426,31 @@ def cmd_launch(a, ui: UI) -> int:
         n = ui.choose("Chat with which?", ["Claude", "ChatGPT"], 1)
         keys = [keys[n - 1]]
     app = apps.APPS[keys[0]]
-    exe = ensure_app(app, ui, may_install=True, may_sign_in=False, agreed=getattr(a, "install_apps", False))
-    if not exe:
-        return 1
-    if apps.signed_in(app, exe) is False and not sign_in(app, exe, ui):
-        return 1
+    in_app = app.key == "codex" and (getattr(a, "open_in", None) or st.get("chatgpt_in")) == "app"
+    if in_app and not apps.desktop_app_found():
+        ui.problem("Full Fat could not find the ChatGPT app, so the chat starts here in the Terminal instead.")
+        in_app = False
+    exe = None
+    if not in_app:
+        exe = terminal_app(app, a, ui)
+        if not exe:
+            return 1
     j = jasp.detect(st.get("settings_file"), st.get("jasp_version"))
     m = workspace.read_manifest(folder)
     host = m.get("host") or j.host_port()[0]
     port = int(m.get("port") or j.host_port()[1])
     if not connect(j, host, port, ui, start_wait=getattr(a, "wait", None) or 120):
         return 1
-    ui.ok("JASP is open and connected. Starting the chat...")
+    if in_app:
+        ui.ok("JASP is open and connected. Opening the chat in the ChatGPT app...")
+        if apps.open_desktop_app(apps.deep_link(folder, prompts.INTRO_MESSAGE)):
+            return app_opened(ui)
+        ui.problem("The ChatGPT app did not open, so the chat starts here in the Terminal instead.")
+        exe = terminal_app(app, a, ui)
+        if not exe:
+            return 1
+    else:
+        ui.ok("JASP is open and connected. Starting the chat...")
     cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder)
     os.chdir(folder)
     if os.name == "nt":
@@ -409,6 +458,23 @@ def cmd_launch(a, ui: UI) -> int:
     real_terminal_input()
     os.execv(exe, cmd)
     return 0  # not reached
+
+
+def terminal_app(app: apps.App, a, ui: UI) -> str | None:
+    """The chat app for the Terminal, installed (with a yes) and signed in, or None."""
+    exe = ensure_app(app, ui, may_install=True, may_sign_in=False, agreed=getattr(a, "install_apps", False))
+    if not exe or (apps.signed_in(app, exe) is False and not sign_in(app, exe, ui)):
+        return None
+    return exe
+
+
+def app_opened(ui: UI) -> int:
+    ui.ok("The ChatGPT app is opening a new chat on its Codex side, in the chat folder.")
+    for line in APP_NOTES[1:]:
+        ui.say("  " + line)
+    if not ui.yes:
+        ui.enter("Press Enter to close this window.")
+    return 0
 
 
 def real_terminal_input() -> None:
@@ -484,6 +550,13 @@ def cmd_doctor(a, ui: UI) -> int:
         ui.say("  JASP is not open (that is fine: the Full Fat icon opens it).")
     for k in st.get("apps") or ["claude"]:
         app = apps.APPS[k]
+        if k == "codex" and st.get("chatgpt_in") == "app":
+            if apps.desktop_app_found():
+                ui.ok("The ChatGPT app is installed (ChatGPT chats open there).")
+            else:
+                bad("The ChatGPT app was not found, so ChatGPT chats start in the Terminal.",
+                    "install the ChatGPT app, or run full-fat setup and choose the Terminal")
+            continue
         exe = apps.find(app)
         if not exe:
             bad(f"{app.product} is not installed.", "run full-fat setup again")
@@ -631,8 +704,11 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--no-launcher", action="store_true", help="don't make the Full Fat icon")
     s.add_argument("--no-trust", action="store_true", help="don't mark the folder as trusted in Codex")
     s.add_argument("--no-start", action="store_true", help="don't offer to start a chat at the end")
+    s.add_argument("--open-in", choices=["app", "terminal"],
+                   help="where ChatGPT chats open: the ChatGPT app's Codex side or the Terminal (remembered)")
     l = sub.add_parser("launch", parents=[common], help="check JASP, then start the chat (the Full Fat icon runs this)")
     l.add_argument("--app", choices=["claude", "codex"], help="which chat app to start")
+    l.add_argument("--open-in", choices=["app", "terminal"], help="open this ChatGPT chat in the app or here")
     l.add_argument("--install-apps", action="store_true", help=argparse.SUPPRESS)
     l.add_argument("--wait", type=float, help=argparse.SUPPRESS)  # seconds to wait for JASP to answer (CI)
     sub.add_parser("doctor", parents=[common], help="check everything and say how to fix problems")

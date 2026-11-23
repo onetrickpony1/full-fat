@@ -112,7 +112,9 @@ What CI proves, and only this:
   `Resources/JASP_Capabilities.json` (`Desktop/gui/aipersonamodel.cpp` v0.98.1 402-433); everything there except the
   asking tools runs without asking.
 - `.claude/commands/annotate.md`: `/annotate` with JASP's annotation prompt.
-- `.codex/config.toml`: no model or effort (see above), read-only sandbox, `approval_policy = "on-request"`,
+- `.codex/config.toml`: no model (see above) but `model_reasoning_effort = "high"`, because the ChatGPT app gets
+  no command-line options (this wins over an effort in the user's own config; the in-chat picker still changes
+  it per chat). Read-only sandbox, `approval_policy = "on-request"`,
   `features.shell_tool = false`, `web_search = "disabled"` (removes `web__run` from code mode, checked with Codex
   0.169), `approvals_reviewer = "user"` (a user-level `guardian_subagent` reviewer would otherwise approve for them).
   `view_image` stays: `features.view_image` can only switch it off, not limit its folders, and Codex needs it to
@@ -121,12 +123,35 @@ What CI proves, and only this:
   `run_tools()`. Keys from https://developers.openai.com/codex/config-reference
   (now served at learn.chatgpt.com/docs/config-file/config-reference), checked with Codex 0.169: "prompt" blocks
   in `codex exec`, "approve" runs, and the project file's `approvals_reviewer` is honoured.
+  At the end, the ChatGPT app's extra tools are off: `features.apps = false`, `[mcp_servers.node_repl]` with
+  `enabled = false` **and a placeholder `command`** (without one, Codex 0.169 refuses the whole file with
+  "invalid transport" where the app isn't installed), and `[plugins."<name>"] enabled = false` for
+  `workspace.DESKTOP_PLUGINS_OFF`. Checked with Codex 0.169 (bundled with chatgpt-bin 26.1111): `codex mcp list`
+  and app-server `config/read` load the file with an empty CODEX_HOME and with the app's own config, and a chat
+  opened in the app had none of those tools and ran at high effort.
 - `jasp/`: the downloaded prompts and `source.txt`. `.full-fat.json`: the manifest.
+
+## The ChatGPT app route
+
+The ChatGPT desktop app has a ChatGPT side and a Codex side. Only the Codex side uses the folder's
+`.codex/config.toml` and `AGENTS.md` (the ChatGPT side asks before every JASP tool and searches the web). With
+state `chatgpt_in = "app"` (setup's default when `apps.desktop_app_found()`), `full-fat launch` does the usual
+`connect` (link on, JASP, ping, link off) and only then opens `apps.deep_link()` with `apps.open_desktop_app()`.
+Not found or not opened: the Terminal chat, as before. The app route doesn't need the Codex CLI or its sign-in.
+- The `prompt` parameter only fills the message box: the user presses Enter (checked on Linux). Say so.
+- "Approve for me" in the app uses an automatic reviewer that overrides `approvals_reviewer = "user"`. The
+  owner accepted this for the app route; the Terminal route still asks the user.
+- JASP is started in its own session and the app by the system, so closing the Terminal afterwards stops
+  nothing. Launch waits for Enter so a Linux or Windows window doesn't vanish before it can be read.
+- Tried on Linux only (chatgpt-bin 26.1111). macOS and Windows detection is from documentation and the
+  platforms' usual link registration, not from a real machine. Tests set `FULL_FAT_CHATGPT_APP=none` so the
+  real app is never opened.
 
 ## Code
 
 - `cli.py`: the commands (setup, launch, doctor, uninstall) and every message. `ui.py`: questions, `--yes`.
-  `link.py`: JASP's connection setting (on only while Full Fat opens JASP).
+  `link.py`: JASP's connection setting (on only while Full Fat opens JASP). `apps.py` also finds and opens the
+  ChatGPT desktop app.
 - `jasp.py`: detection per OS, the INI editor and the `Store` (INI file or macOS defaults domain), running and ping.
 - `prompts.py`: download and C++ string literal parsing. `workspace.py`: the chat folder. `apps.py`: Claude Code
   and Codex. `launcher.py`: the Full Fat icon. `state.py`: Full Fat's own folder (answers, backups).
