@@ -41,6 +41,6 @@ full_fat = ["templates/*", "icons/*"]
 testpaths = ["tests"]
 markers = [
     "network: downloads JASP's prompts from GitHub (run with -m network)",
-    "real_connector: runs connector.warm for real (with a fake server)",
+    "real_connector: runs connector.warm and archive_gone for real (with a fake server or opener)",
 ]
 addopts = "-m 'not network'"

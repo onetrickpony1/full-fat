@@ -6,17 +6,20 @@
 - **The JASP tools no longer vanish from the chat just after an analysis runs.** While JASP was busy, its
   connector took a busy answer for a closed JASP and dropped all its tools for a few seconds. Full Fat now uses
   the JASP team's fix for this (jasp-mcp pull request #2). Run setup again (or the install line) to get it.
-  If the tools still disappear for a moment, the assistant waits for them to come back instead of telling you
+  If GitHub ever stops serving that version, setup uses the connector's main version instead of failing.
+  If the tools still disappear for a moment, the assistant asks you to send "continue" instead of telling you
   to restart; the restart advice is only for a chat that starts without them.
 - **The assistant works from what is really in JASP.** It is rarely told when you change something in JASP's
   own window, so it could work from old options and undo your change. It now reads JASP's current state
   before it works on an analysis, and again when you say you changed something.
 - **Slow analyses no longer get lost.** The connector gives up on a JASP call after 60 seconds while JASP keeps
-  working, and the result was then lost behind an empty error. The assistant now asks for results in steps of
-  at most 45 seconds and checks again, and after an unclear error it reads the results instead of running the
-  analysis again or telling you to restart. Codex waits 120 seconds for a JASP tool instead of 60.
+  working, and the result was then lost behind an empty error. The assistant now asks for results and data
+  loads in steps of at most 45 seconds and checks again until the analysis is finished, and after an unclear
+  error it reads the analysis instead of running it again or telling you to restart. Codex waits 120 seconds
+  for a JASP tool instead of 60.
 - **The assistant calls JASP one step at a time.** JASP turns away a second call while one is still running,
-  so calls made side by side failed.
+  so calls made side by side failed. When JASP is still busy with an earlier call, the assistant now asks you
+  to send "continue" in a moment instead of trying again and again.
 - **Analyses with variable boxes inside a model now get set up properly.** In a Process model, JASP empties
   boxes such as Independent X and Moderator W without an error when they are filled in the same step as the
   main variable boxes, and the model runs as "incomplete". The assistant now fills the main boxes first, starts

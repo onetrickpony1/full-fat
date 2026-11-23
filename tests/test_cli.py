@@ -614,3 +614,26 @@ def test_setup_and_doctor_say_to_update_a_codex_that_cant_read_the_folder(env, m
     assert "Codex could not read the chat folder's settings" in out and apps.CODEX.install_posix in out
     fake.write_text('#!/bin/sh\nexit 0\n')  # Codex updated
     assert cli.main(["doctor"]) == 0
+
+
+def test_setup_falls_back_to_mains_connector_when_the_pinned_one_is_gone(env, monkeypatch, capsys):
+    # The pin is a pull request's commit; if GitHub no longer serves it, setup writes main's commit instead of
+    # failing, and doctor says to run setup again for a folder still on the missing commit.
+    from full_fat import workspace
+    tmp_path, conf = env
+    pretend_uv_is_installed(monkeypatch)
+    monkeypatch.setattr(jasp, "ping", lambda h, p, timeout=3: False)
+    cli.main(setup_args(tmp_path, conf))
+    ws = tmp_path / "ws"
+    assert workspace.JASP_MCP_URL in (ws / ".mcp.json").read_text()
+    monkeypatch.setattr(cli.connector, "archive_gone", lambda url, timeout=30: url == workspace.JASP_MCP_URL)
+    monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (False, "404 Not Found"))
+    capsys.readouterr()
+    cli.main(["doctor", "--dir", str(ws), "--settings-file", str(conf)])
+    out = capsys.readouterr().out
+    assert "does not start" in out and "Fix: run full-fat setup again" in out
+    monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (True, ""))
+    cli.main(setup_args(tmp_path, conf))
+    for rel in (".mcp.json", ".codex/config.toml"):
+        text = (ws / rel).read_text()
+        assert workspace.JASP_MCP_FALLBACK_URL in text and workspace.JASP_MCP_URL not in text

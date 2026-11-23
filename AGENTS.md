@@ -53,6 +53,13 @@ Pinned to `6f675f63977073d342a5f1998fe99c3511190924` (`workspace.JASP_MCP_SHA`) 
   rebase merge leaves it on the pull request's ref, which GitHub does not delete. The one risk is a force-push
   to the PR branch before it merges: the old commit is then on no ref. `tests/test_network.py` checks the link
   (`pytest -m network`). When #2 merges, move the pin to main. `mcp<2` stays until #1 (the same cap) merges.
+- **Fallback:** setup asks GitHub for the pinned archive first (`connector.pick_url`, a HEAD request). Only a
+  404 or 410 for it (and not for the fallback) makes setup write main's commit
+  (`workspace.JASP_MCP_FALLBACK_SHA`, `72d9d7be`) into `.mcp.json` and `.codex/config.toml`; offline or any
+  other error keeps the pin, and the connector start explains the failure. `doctor` says to run setup again
+  when the connector does not start and the folder holds a URL that `pick_url` no longer picks. Tests stub
+  `archive_gone` (conftest) unless marked `real_connector`. Don't push a tag or a fork copy of the commit
+  without the owner.
 - **Never use `git+https`**: it needs git, which new Macs and Windows PCs lack (on a Mac it opens Apple's
   "install developer tools" dialog). The archive builds with hatchling and no git. CI's installer job hides git
   to keep this true.

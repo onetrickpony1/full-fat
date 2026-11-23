@@ -9,11 +9,37 @@ import queue
 import subprocess
 import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
+
+from . import workspace
 
 INIT = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
                    "clientInfo": {"name": "full-fat", "version": "1"}}}
+
+
+def archive_gone(url: str, timeout: float = 30) -> bool:
+    """Does GitHub say this connector archive does not exist (404 or 410)? Any other failure (offline, a
+    slow network, GitHub down) is not "gone": the connector start reports that with its own message."""
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "full-fat"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            return False
+    except urllib.error.HTTPError as e:
+        return e.code in (404, 410)
+    except (OSError, ValueError):
+        return False
+
+
+def pick_url(gone=None) -> str:
+    """The connector archive setup writes into the chat folder: the pinned commit, or main's commit when the
+    pinned one can no longer be downloaded (see workspace.JASP_MCP_FALLBACK_SHA)."""
+    gone = gone or archive_gone
+    if gone(workspace.JASP_MCP_URL) and not gone(workspace.JASP_MCP_FALLBACK_URL):
+        return workspace.JASP_MCP_FALLBACK_URL
+    return workspace.JASP_MCP_URL
 
 
 def explain(detail: str) -> str:

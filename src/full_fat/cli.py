@@ -259,7 +259,7 @@ def cmd_setup(a, ui: UI) -> int:
         return 1
     persona = pick_persona(a.persona or st.get("persona"), p, ui)
     host, port = j.host_port()
-    res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs)
+    res = workspace.build(folder, p, persona, careful, host, port, j.plot_dirs, connector_url=connector.pick_url())
     ui.ok(f"Chat folder ready: {keep(folder)} (JASP instructions from {p.ref}, persona {persona}"
           f"{', careful mode' if careful else ''}).")
     for n in p.notes:
@@ -690,6 +690,7 @@ def cmd_doctor(a, ui: UI) -> int:
         bad("uv is missing, so the chat app cannot reach JASP.", f"run the Full Fat install line again ({GITHUB})")
     elif not missing:
         import json  # noqa: PLC0415
+        server: dict = {}
         try:
             server = json.loads((folder / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["jasp"]
             ok, detail = connector.warm(server, folder)
@@ -697,6 +698,9 @@ def cmd_doctor(a, ui: UI) -> int:
             ok, detail = False, str(e)
         if ok:
             ui.ok("The link between the chat and JASP starts.")
+        elif connector.pick_url() not in str(server.get("args")):
+            # the folder's connector can no longer be downloaded; setup writes one that can
+            bad("The link between the chat and JASP does not start.", "run full-fat setup again")
         else:
             bad("The link between the chat and JASP does not start.", connector.explain(detail))
     for x in st.get("launchers", []):

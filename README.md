@@ -301,9 +301,11 @@ window it ran in.
   Open Font License 1.1, see `assets/icon/OFL-Inter.txt`).
 - **Quirks of JASP and its connector** (seen with JASP 0.99.0). Full Fat pins jasp-mcp to the JASP team's fix
   for tools that vanished for a few seconds just after an analysis ran (upstream pull request #2, not merged
-  yet), and keeps it on the MCP Python SDK 1.x. Some quirks remain, and the chat folder's instructions tell the
+  yet), and keeps it on the MCP Python SDK 1.x. If GitHub ever stops serving that commit, setup uses the
+  connector's main version instead. Some quirks remain, and the chat folder's instructions tell the
   assistant how to handle each one:
   - JASP takes one call at a time and turns away a second one, so the assistant calls its tools one at a time.
+    If JASP is still busy with an earlier call, the assistant asks you to send "continue" in a moment.
   - The assistant is rarely told about changes you make in JASP's own window, so it reads JASP's current state
     before it works on an analysis.
   - jasp-mcp gives up on a call after 60 seconds, with no setting to change that, while JASP keeps working. The
@@ -318,7 +320,7 @@ window it ran in.
 - **Not affiliated with JASP.** Full Fat is not made or endorsed by the JASP team. JASP's prompts are
   downloaded from [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop) (AGPL-3.0) when you
   run setup. The connector is the official [jasp-mcp](https://github.com/jasp-stats/jasp-mcp), pinned to a
-  tested commit. See [LEGAL.md](LEGAL.md).
+  reviewed commit. See [LEGAL.md](LEGAL.md).
 
 ## License
 

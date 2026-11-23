@@ -36,18 +36,35 @@ from .prompts import Prompts
 # connector drop all its tools. The commit is on a fork, but GitHub serves it from jasp-stats' archive link too
 # (it is kept as the pull request's ref, refs/pull/2/head). Move to main once #2 is merged.
 JASP_MCP_SHA = "6f675f63977073d342a5f1998fe99c3511190924"
+# If that commit is ever gone (for example after a force-push to the pull request's branch), setup writes the
+# connector from main's commit instead (connector.pick_url): the tools then vanish for a moment while JASP is
+# busy again, but the chat works.
+JASP_MCP_FALLBACK_SHA = "72d9d7be9c003b9681b40871ee5850795108e5ab"  # jasp-stats/jasp-mcp main, 2026-05-13
 # jasp-mcp crashes with the MCP Python SDK 2.x ("'Server' object has no attribute 'list_tools'"),
 # so uvx is told to use mcp<2 (pull request #1, not merged yet). It is fetched as a GitHub archive, not
 # git+https, because fresh Macs and Windows PCs have no git (on a Mac, calling git opens Apple's "install
 # developer tools" dialog instead).
-JASP_MCP_URL = f"https://github.com/jasp-stats/jasp-mcp/archive/{JASP_MCP_SHA}.zip"
+
+
+def archive_url(sha: str) -> str:
+    return f"https://github.com/jasp-stats/jasp-mcp/archive/{sha}.zip"
+
+
+JASP_MCP_URL = archive_url(JASP_MCP_SHA)
+JASP_MCP_FALLBACK_URL = archive_url(JASP_MCP_FALLBACK_SHA)
 # Compiled packages are taken only as ready-made wheels: if the newest version has none for this computer, uv
 # picks the newest one that does (for example cryptography 50.0.2 has no wheel for Intel Macs, so they get
 # 48.0.1). Building one needs Rust and a compiler, which most computers lack. jasp-mcp itself is still built
 # from its source archive (a plain `--no-build` would stop that too).
 WHEEL_ONLY = ["cryptography", "cffi", "pydantic-core", "rpds-py"]
-UVX_ARGS = [a for p in WHEEL_ONLY for a in ("--no-build-package", p)] + [
-    "--with", "mcp<2", "--from", f"jasp-mcp @ {JASP_MCP_URL}", "jasp-mcp"]
+
+
+def uvx_args(url: str = JASP_MCP_URL) -> list[str]:
+    return [a for p in WHEEL_ONLY for a in ("--no-build-package", p)] + [
+        "--with", "mcp<2", "--from", f"jasp-mcp @ {url}", "jasp-mcp"]
+
+
+UVX_ARGS = uvx_args()
 # jasp-mcp gives up on a JASP call after a fixed 60 s, with no setting to change that. Codex's own limit for a
 # tool call (tool_timeout_sec, default 60 s) is set above it, so the connector's answer always gets through.
 CODEX_TOOL_TIMEOUT = 120
@@ -150,8 +167,8 @@ def agents_md(prompts: Prompts, persona: str) -> str:
     return text
 
 
-def mcp_server(uvx: str, host: str, port: int) -> dict:
-    return {"command": uvx, "args": list(UVX_ARGS), "env": {"JASP_RPC_URL": f"http://{host}:{port}/rpc"}}
+def mcp_server(uvx: str, host: str, port: int, url: str = JASP_MCP_URL) -> dict:
+    return {"command": uvx, "args": uvx_args(url), "env": {"JASP_RPC_URL": f"http://{host}:{port}/rpc"}}
 
 
 CLAUDE_MODEL = "opus"
@@ -170,8 +187,8 @@ def run_tools(careful: bool) -> list[str]:
     return list(READ_ONLY_TOOLS if careful else DEFAULT_TOOLS)
 
 
-def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
-    args = ", ".join(json.dumps(a) for a in UVX_ARGS)
+def codex_config(uvx: str, host: str, port: int, careful: bool, url: str = JASP_MCP_URL) -> str:
+    args = ", ".join(json.dumps(a) for a in uvx_args(url))
     lines = [
         "# Full Fat: Codex settings for this folder (used once you trust the folder). The Codex side of the",
         "# ChatGPT app uses them too.",
@@ -291,7 +308,7 @@ def _load_json(path: Path, result: Result, stamp: str) -> dict:
 
 def build(folder: Path, prompts: Prompts, persona: str, careful: bool, host: str, port: int,
           plot_dirs: list[Path], uvx: str | None = None, home: Path | None = None,
-          platform: str | None = None) -> Result:
+          platform: str | None = None, connector_url: str = JASP_MCP_URL) -> Result:
     folder = Path(folder)
     home = home or Path.home()
     uvx = uvx or find_uvx()
@@ -346,13 +363,13 @@ def build(folder: Path, prompts: Prompts, persona: str, careful: bool, host: str
     ann = annotate_md(prompts)
     if ann is not None:
         write_text(".claude/commands/annotate.md", ann)
-    write_text(".codex/config.toml", codex_config(uvx, host, port, careful))
+    write_text(".codex/config.toml", codex_config(uvx, host, port, careful, connector_url))
 
     # JSON settings: merged, so anything else in them stays
     mcp_path = folder / ".mcp.json"
     mcp = _load_json(mcp_path, result, stamp)
     servers = dict(mcp.get("mcpServers") or {})
-    servers["jasp"] = mcp_server(uvx, host, port)
+    servers["jasp"] = mcp_server(uvx, host, port, connector_url)
     mcp["mcpServers"] = servers
     _write_json(mcp_path, mcp)
     result.written.append(".mcp.json")

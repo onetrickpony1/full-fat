@@ -257,8 +257,22 @@ def test_guidance_on_one_call_at_a_time_state_and_slow_calls():
     # up JASP's notes about the user's own edits, and it gives up on a call after a fixed 60 s.
     env = " ".join(workspace.template("environment.md").split())
     assert "one at a time, never in parallel" in env
-    assert "read JASP's current state with `jasp_get_analyses_state`" in env
+    # get_analyses_state needs analysisIds (Resources/JASP_RPC.json v0.99.0), so the IDs come first
+    assert "get its ID from `jasp_analyses_list`" in env and "(it needs `analysisIds`)" in env
     assert "If the user says they changed something, read it again before you act." in env
-    assert "Keep `timeoutMs` at 45000 or lower" in env and "`jasp_analysis_results`" in env
+    assert "Keep `timeoutMs` at 45000 or lower, even for slow analyses and data loading" in env
+    # status names from Desktop/analysis/analysis.cpp statusToString (v0.99.0)
+    for status in ("complete", "validationError", "fatalError", "aborted", "running", "empty", "runningImg"):
+        assert f'"{status}"' in env
+    assert "check again with `jasp_analysis_results`" in env
+    assert "read it with `jasp_get_analyses_state`, giving its ID and `include_results` true" in env
     assert "Don't run it again blindly, and don't tell the user to restart." in env
-    assert {"jasp_get_analyses_state", "jasp_analysis_results"} <= set(workspace.READ_ONLY_TOOLS)
+    assert {"jasp_get_analyses_state", "jasp_analysis_results", "jasp_analyses_list"} <= set(workspace.READ_ONLY_TOOLS)
+
+
+def test_guidance_on_a_busy_jasp():
+    env = " ".join(workspace.template("environment.md").split())
+    assert 'If a JASP tool answers "Procedure call already in flight"' in env
+    assert "Don't call it again in a loop." in env
+    assert "Try again" not in env  # vanished tools: ask for "continue" instead of retrying blindly
+    assert 'Tell the user that JASP was busy and ask them to send "continue".' in env

@@ -23,20 +23,24 @@ How this setup differs from the chat inside JASP:
   reach JASP any other way.
 - If the `jasp_` tools disappear in the middle of a chat, usually just after an analysis
   ran, JASP was busy for a moment and they come back on their own within a few seconds.
-  Nothing is lost. Try again; if they are still missing, tell the user that JASP was busy
-  and ask them to send "continue". Only give the restart advice above if they are still
-  missing after that.
+  Nothing is lost. Tell the user that JASP was busy and ask them to send "continue". Only
+  give the restart advice above if the tools are still missing after that.
 - Call the JASP tools one at a time, never in parallel. JASP handles one call at a time
   and turns away a second call that arrives while the first is still running.
+- If a JASP tool answers "Procedure call already in flight", JASP is still busy with an
+  earlier call. Tell the user it is still working and ask them to send "continue" in a
+  moment. Don't call it again in a loop.
 - The user can also change things in JASP's own window, and you are usually not told.
-  Before you work on an analysis, read JASP's current state with
-  `jasp_get_analyses_state`; don't assume you know its options. If the user says they
-  changed something, read it again before you act.
-- Keep `timeoutMs` at 45000 or lower, even for slow analyses. If the status is still
-  "running", wait and check again with `jasp_analysis_results`. If a call fails after about
-  a minute with an empty or unclear error, the analysis may still be running in JASP: wait,
-  then read its results or the state again. Don't run it again blindly, and don't tell the
-  user to restart.
+  Before you work on an analysis, get its ID from `jasp_analyses_list`, then read its
+  current state with `jasp_get_analyses_state` (it needs `analysisIds`); don't assume you
+  know its options. If the user says they changed something, read it again before you act.
+- Keep `timeoutMs` at 45000 or lower, even for slow analyses and data loading, whatever
+  the tool descriptions suggest. If the status is not finished yet (anything other than
+  "complete", "validationError", "fatalError" or "aborted", for example "running",
+  "empty" or "runningImg"), check again with `jasp_analysis_results`. If a call fails
+  after about a minute with an empty or unclear error, the analysis may still be running
+  in JASP: wait, then read it with `jasp_get_analyses_state`, giving its ID and
+  `include_results` true. Don't run it again blindly, and don't tell the user to restart.
 - Setting options: start from the analysis's own options and their descriptions
   (`jasp_analysis_create`, or `jasp_get_analyses_state` with `include_descriptions`), not
   from another analysis. Boxes inside a model or tab only accept variables that are already
