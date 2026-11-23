@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -420,8 +421,16 @@ def test_launch_open_in_terminal_overrides_the_app(env, monkeypatch):
     assert seen["cmd"][0] == str(fake)
 
 
+def pretend_uv_is_installed(monkeypatch):
+    """CI runners have no uv; doctor would report it missing."""
+    real = shutil.which
+    monkeypatch.setattr(cli.shutil, "which", lambda name, *a, **k: "/usr/bin/uvx" if name == "uvx" else real(name, *a, **k))
+    monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (True, ""))
+
+
 def test_doctor_checks_the_app_instead_of_terminal_codex(env, monkeypatch, capsys):
     tmp_path, conf = env
+    pretend_uv_is_installed(monkeypatch)
     monkeypatch.setattr(jasp, "ping", lambda h, p, timeout=3: False)
     monkeypatch.setenv("FULL_FAT_CHATGPT_APP", "yes")
     cli.main(app_setup_args(tmp_path, conf))
@@ -599,7 +608,7 @@ def test_setup_and_doctor_say_to_update_a_codex_that_cant_read_the_folder(env, m
     assert "Almost done" in out and "config" not in out.lower().replace("configur", "")
     monkeypatch.setattr(jasp, "ping", lambda h, p: False)
     monkeypatch.setattr(jasp, "running", lambda: False)
-    monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (True, ""))
+    pretend_uv_is_installed(monkeypatch)
     assert cli.main(["doctor"]) == 1
     out = " ".join(capsys.readouterr().out.split())
     assert "Codex could not read the chat folder's settings" in out and apps.CODEX.install_posix in out
