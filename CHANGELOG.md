@@ -52,7 +52,7 @@
 - **Plots show in the browser.** Before, a plot link in a Claude chat on claude.ai/code said "Couldn't load
   this file", because JASP keeps plots outside the chat folder. Now Full Fat copies JASP's plots into the
   chat folder's `plots` folder while the chat runs, and the chat links to the copy, which opens when you
-  click it.
+  click it. The copies stay, so plot links in earlier chats keep working, until `full-fat uninstall`.
 
 ### Fixes
 - **Codex chats in the ChatGPT app start at high effort and without the app's extra tools.** Before, a chat

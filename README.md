@@ -253,8 +253,9 @@ window it ran in.
 - **Plots in the browser.** The browser only opens files inside the chat folder, and JASP keeps its plots in
   its own temp folder. So while a Claude chat is open in the browser, the same helper copies every PNG below
   JASP's temp folder into `plots/` in the chat folder, at the same path, and the chat links to the copy. The
-  chat itself still can't write files. The next browser chat and `full-fat uninstall` delete the copies, but
-  not a file you changed or put there. The ChatGPT app shows plots itself, so nothing changes there.
+  chat itself still can't write files. The copies stay, so links in earlier chats keep working, until
+  `full-fat uninstall` deletes them (but not a file you changed or put there). The ChatGPT app shows plots
+  itself, so nothing changes there.
 - **Models.** The icon starts the chat on Opus (Claude Code) or GPT-6.2 Astra (Codex) at high effort, by
   passing them when it starts the app. It leaves them out when your own settings already choose a model or
   an effort: when you pick a model with `/model` in Claude Code, Claude saves it as your default, and the

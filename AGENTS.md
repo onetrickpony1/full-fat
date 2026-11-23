@@ -136,7 +136,7 @@ What CI proves, and only this:
 - `plots/` (only while or after a browser chat): copies of JASP's plot PNGs, made by `plots.Copier` in the
   Remote Control helper (`remote.watch`), at their path below JASP's temp folder (`.../temp/4/resources/1/x.png`
   becomes `plots/4/resources/1/x.png`). `plots/.full-fat-plots.json` lists them with hashes. Never a symlink,
-  never over a file Full Fat didn't copy. The next browser chat and uninstall delete unchanged copies. Checked
+  never over a file Full Fat didn't copy, never through a linked subfolder or temp file. A chat start never deletes copies (an earlier or running chat may link to them); uninstall deletes the unchanged ones. A copy that is gone is made again (the copier checks the copy, not only what it saw). Checked
   in claude.ai/code on 2026-11-23: a link to a real file in the folder opens (relative or absolute path); JASP's
   own path shows "Couldn't load this file"; a symlink in the folder does nothing, and Read asks for it as
   outside the folder. So copy, don't link, and don't widen Claude's write access. `templates/environment.md`

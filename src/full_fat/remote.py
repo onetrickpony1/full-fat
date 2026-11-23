@@ -106,8 +106,7 @@ def watch(pid: int, folder: Path, plot_dirs: list[Path], since: float, still_run
     chat ends. Returns the link it opened, if any."""
     still_running = still_running or (lambda: alive(pid))
     open_link = open_link or apps.open_link
-    copier = plots.Copier(plot_dirs, folder)
-    copier.clear_earlier()
+    copier = plots.Copier(plot_dirs, folder)  # copies from earlier chats stay: they may link to them
     opened = None
     end_wait = clock() + wait
     while still_running():

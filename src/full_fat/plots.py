@@ -8,8 +8,9 @@ JASP's temp folder to plots/ in the chat folder, at the same path below it: <tem
 The assistant's instructions (templates/environment.md) say to link to the copy.
 
 Only Full Fat copies; the chat itself still can't write files. Never a symlink, never over a file Full Fat did
-not copy. plots/.full-fat-plots.json lists the copies with their hashes, so the next browser chat and
-`full-fat uninstall` delete only those that are unchanged, as with the other files Full Fat writes.
+not copy. plots/.full-fat-plots.json lists the copies with their hashes, so `full-fat uninstall` deletes only
+those that are unchanged, as with the other files Full Fat writes. A new chat never deletes them: an earlier or
+still running chat may link to them. A copy that went missing is made again.
 """
 
 from __future__ import annotations
@@ -26,6 +27,21 @@ MAX_BYTES = 50 * 1024 * 1024  # a plot is far smaller; anything bigger is not co
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _write_new(path: Path, data: bytes) -> None:
+    """Write data to a new file at path: never through a link, never into a file that is already there. A
+    regular file left at path (an interrupted copy) is replaced; a link there is refused (OSError)."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    if path.is_symlink():
+        raise OSError(f"{path} is a link")
+    if path.exists():
+        if not path.is_file():
+            raise OSError(f"{path} is not a file")
+        path.unlink()
+    fd = os.open(path, flags, 0o644)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
 
 
 def _inside(path: Path, root: Path) -> bool:
@@ -53,7 +69,7 @@ class Copier:
 
     def _save(self) -> None:
         tmp = self.dest / (INDEX + ".tmp")
-        tmp.write_text(json.dumps(self.index, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        _write_new(tmp, (json.dumps(self.index, indent=1, sort_keys=True) + "\n").encode("utf-8"))
         os.replace(tmp, self.dest / INDEX)
 
     def _safe_dest(self) -> bool:
@@ -79,10 +95,10 @@ class Copier:
                         continue
                     st = src.stat()
                     key = (st.st_mtime_ns, st.st_size)
-                    if self.seen.get(src) == key or st.st_size > MAX_BYTES:
-                        continue
-                    self.seen[src] = key
                     rel = src.relative_to(root).as_posix()
+                    if st.st_size > MAX_BYTES or (self.seen.get(src) == key and (self.dest / rel).is_file()):
+                        continue  # too big, or copied already and the copy is still there
+                    self.seen[src] = key
                     if self._copy(src, rel):
                         copied.append(rel)
                 except (OSError, ValueError):
@@ -97,6 +113,8 @@ class Copier:
         out = self.dest / rel
         if out.is_symlink() or (out.exists() and not self._ours(rel)):
             return False  # never replace a link or a file Full Fat did not copy
+        if not _inside(out.parent, self.dest):  # before making folders: a linked subfolder leads elsewhere
+            return False
         out.parent.mkdir(parents=True, exist_ok=True)
         if not _inside(out.parent, self.dest):
             return False
@@ -104,7 +122,7 @@ class Copier:
         if not data.startswith(b"\x89PNG"):
             return False
         tmp = out.with_name(out.name + ".full-fat-tmp")
-        tmp.write_bytes(data)
+        _write_new(tmp, data)
         os.replace(tmp, out)
         self.index[rel] = _sha(data)
         return True
@@ -116,9 +134,9 @@ class Copier:
         except OSError:
             return False
 
-    def clear_earlier(self) -> int:
-        """Delete the copies from earlier chats that nobody changed, then the folders that are left empty
-        (plots/ itself too). Returns how many files were deleted."""
+    def remove_copies(self) -> int:
+        """For uninstall: delete the copies that nobody changed, then the folders that are left empty (plots/
+        itself too). Returns how many files were deleted."""
         if self.dest.is_symlink() or not self.dest.is_dir():
             return 0
         gone = 0
@@ -158,4 +176,4 @@ def copies(folder: Path) -> list[Path]:
 
 def clear(folder: Path) -> int:
     """For uninstall: delete the plot copies Full Fat made in folder."""
-    return Copier([], folder).clear_earlier()
+    return Copier([], folder).remove_copies()

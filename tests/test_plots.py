@@ -64,7 +64,7 @@ def test_skips_links_and_files_that_are_not_png(tmp_path):
     assert plots.Copier([temp], folder).sync() == ["resources/3/_5.png"]
 
 
-def test_the_next_chat_and_uninstall_delete_only_unchanged_copies(tmp_path):
+def test_uninstall_deletes_only_unchanged_copies(tmp_path):
     temp, folder = jasp_temp(tmp_path)
     (temp / "resources" / "4").mkdir()
     (temp / "resources" / "4" / "_1.png").write_bytes(PNG + b"4")
@@ -72,13 +72,64 @@ def test_the_next_chat_and_uninstall_delete_only_unchanged_copies(tmp_path):
     edited = folder / "plots" / "resources" / "4" / "_1.png"
     edited.write_bytes(PNG + b"edited by you")
     (folder / "plots" / "yours.txt").write_text("keep me")
-    assert plots.Copier([temp], folder).clear_earlier() == 1
+    assert plots.clear(folder) == 1
     assert not (folder / "plots" / "resources" / "3").exists()
     assert edited.exists() and (folder / "plots" / "yours.txt").exists()
     edited.unlink()
     (folder / "plots" / "yours.txt").unlink()
     assert plots.clear(folder) == 0
     assert not (folder / "plots").exists()  # empty folders go too
+
+
+def test_a_new_chat_keeps_the_copies_of_earlier_chats(tmp_path, monkeypatch):
+    from full_fat import remote  # noqa: PLC0415
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
+    temp, folder = jasp_temp(tmp_path)
+    plots.Copier([temp], folder).sync()
+    (temp / "resources" / "3" / "_5.png").unlink()  # JASP has moved on; the earlier chat still links to the copy
+    remote.watch(1, folder, [temp], 0, still_running=lambda: False, open_link=lambda u: None, sleep=lambda s: None)
+    assert (folder / "plots" / "resources" / "3" / "_5.png").read_bytes() == PNG + b"1"
+
+
+def test_a_copy_that_went_missing_is_made_again(tmp_path):
+    temp, folder = jasp_temp(tmp_path)
+    c = plots.Copier([temp], folder)
+    assert c.sync() == ["resources/3/_5.png"]
+    (folder / "plots" / "resources" / "3" / "_5.png").unlink()
+    assert c.sync() == ["resources/3/_5.png"]  # same plot, unchanged in JASP, copied again
+    assert (folder / "plots" / "resources" / "3" / "_5.png").is_file()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need extra rights on Windows")
+def test_no_folders_are_made_through_a_linked_subfolder(tmp_path):
+    temp, folder = jasp_temp(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (folder / "plots").mkdir()
+    (folder / "plots" / "resources").symlink_to(elsewhere, target_is_directory=True)
+    assert plots.Copier([temp], folder).sync() == []
+    assert list(elsewhere.iterdir()) == []  # not even the folder "3"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need extra rights on Windows")
+def test_never_writes_through_a_linked_temp_file(tmp_path):
+    temp, folder = jasp_temp(tmp_path)
+    target = tmp_path / "target.txt"
+    target.write_text("keep")
+    dest = folder / "plots" / "resources" / "3"
+    dest.mkdir(parents=True)
+    (dest / "_5.png.full-fat-tmp").symlink_to(target)
+    assert plots.Copier([temp], folder).sync() == []
+    assert target.read_text() == "keep"
+
+
+def test_an_interrupted_copy_is_replaced(tmp_path):
+    temp, folder = jasp_temp(tmp_path)
+    dest = folder / "plots" / "resources" / "3"
+    dest.mkdir(parents=True)
+    (dest / "_5.png.full-fat-tmp").write_bytes(b"half")
+    assert plots.Copier([temp], folder).sync() == ["resources/3/_5.png"]
+    assert (dest / "_5.png").read_bytes() == PNG + b"1" and not (dest / "_5.png.full-fat-tmp").exists()
 
 
 def test_uninstall_removes_the_plot_copies_and_the_folder(env):
