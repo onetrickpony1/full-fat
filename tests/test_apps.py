@@ -148,12 +148,15 @@ def test_connector_failures_are_explained():
 
 def test_deep_link_encodes_the_folder_and_prompt():
     from urllib.parse import parse_qs, urlsplit
-    url = apps.deep_link(Path("/Users/me/Full Fat"), "Give a short introduction.")
+    folder = Path("/Users/me/Full Fat")  # on Windows this path is written with backslashes
+    url = apps.deep_link(folder, "Give a short introduction.")
     assert url.startswith("codex://threads/new?")
     assert " " not in url and "+" not in url
-    assert "path=%2FUsers%2Fme%2FFull%20Fat&" in url and "mode=codex" in url
+    assert "Full%20Fat&" in url and "mode=codex" in url
+    if os.name != "nt":
+        assert "path=%2FUsers%2Fme%2FFull%20Fat&" in url
     q = parse_qs(urlsplit(url).query)
-    assert q == {"path": ["/Users/me/Full Fat"], "mode": ["codex"], "prompt": ["Give a short introduction."]}
+    assert q == {"path": [str(folder)], "mode": ["codex"], "prompt": ["Give a short introduction."]}
     win = parse_qs(urlsplit(apps.deep_link(Path(r"C:\Users\Me & You\Full Fat"), "a&b=c")).query)
     assert win["path"] == [str(Path(r"C:\Users\Me & You\Full Fat"))] and win["prompt"] == ["a&b=c"]
 
