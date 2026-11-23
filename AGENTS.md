@@ -44,8 +44,15 @@ Project-specific rules. General repo rules are in the owner's conventions file.
 
 ## jasp-mcp
 
-Pinned to `72d9d7be9c003b9681b40871ee5850795108e5ab` (`workspace.JASP_MCP_SHA`) and run as
+Pinned to `6f675f63977073d342a5f1998fe99c3511190924` (`workspace.JASP_MCP_SHA`) and run as
 `uvx --with "mcp<2" --from "jasp-mcp @ https://github.com/jasp-stats/jasp-mcp/archive/<sha>.zip" jasp-mcp`.
+- That commit is upstream pull request #2 (FBartos, open, one commit on top of main `72d9d7be`; main has not
+  moved since). It lives on the fork `FBartos/jasp-mcp`, but GitHub keeps it in jasp-stats/jasp-mcp as
+  `refs/pull/2/head`, so the jasp-stats archive link above serves it by hash (checked 2026-11-23: HTTP 200,
+  same bytes as the fork's link, uvx builds it with a clean cache). A merge commit keeps it on main; a squash or
+  rebase merge leaves it on the pull request's ref, which GitHub does not delete. The one risk is a force-push
+  to the PR branch before it merges: the old commit is then on no ref. `tests/test_network.py` checks the link
+  (`pytest -m network`). When #2 merges, move the pin to main. `mcp<2` stays until #1 (the same cap) merges.
 - **Never use `git+https`**: it needs git, which new Macs and Windows PCs lack (on a Mac it opens Apple's
   "install developer tools" dialog). The archive builds with hatchling and no git. CI's installer job hides git
   to keep this true.
@@ -56,13 +63,32 @@ Pinned to `72d9d7be9c003b9681b40871ee5850795108e5ab` (`workspace.JASP_MCP_SHA`) 
 - **Compiled packages come only as wheels** (`workspace.WHEEL_ONLY`, `--no-build-package` for each): cryptography
   50.0.2 has no Intel Mac wheel, and building it needs Rust. uvx has no `--only-binary`, and `--no-build` would
   also refuse to build jasp-mcp's own source archive. CI's `connector-intel-mac` job checks it.
-- **Tools vanish for about 2 s after a long call** (reproduced 2026-11-23, JASP 0.99.0 Flatpak, jaspProcess
-  0.95.5). `server._poll_jasp` pings every 2 s and clears all tools on one failed ping. JASP's dispatcher
-  (`Desktop/rpc/jasprpcdispatcher.cpp` v0.99.0 line 552) answers every call that arrives while `analysis_run`,
-  `analysis_results`, `data_load` or `data_load_status` wait in a nested event loop with -32000 "Procedure call
-  already in flight", so a ping during a 1.6 s run cleared the tools. Not a stall: pings took at most 0.11 s.
-  Full Fat does not wrap or patch jasp-mcp for this; `templates/environment.md` tells the assistant to wait.
-  Drafted upstream reports are not filed yet.
+- **Tools vanished for about 2 s after a long call** with `72d9d7be` (reproduced 2026-11-23, JASP 0.99.0
+  Flatpak, jaspProcess 0.95.5). `server._poll_jasp` pings every 2 s and cleared all tools on one failed ping.
+  JASP's dispatcher (`Desktop/rpc/jasprpcdispatcher.cpp` v0.99.0 line 552) answers every call that arrives
+  while `analysis_run`, `analysis_results`, `data_load` or `data_load_status` wait in a nested event loop with
+  -32000 "Procedure call already in flight", so a ping during a 1.6 s run cleared the tools. Not a stall:
+  pings took at most 0.11 s.
+  Pull request #2 treats any JSON-RPC error answer as alive, so only a transport failure clears the tools
+  (checked against a stand-in JASP with the same one-call guard: no `tools/list_changed` during a 7 s run).
+  `templates/environment.md` still tells the assistant to wait, for folders made with the old pin and for real
+  drop-outs.
+- **What the pin does not fix** (review of 2026-11-23, source unless marked). Full Fat does not wrap or patch
+  jasp-mcp; `environment.md` covers each one:
+  - the 2 s ping is a read call to JASP, and an idle JASP marks its pending state update as seen on it
+    (`jasprpcdispatcher.cpp` 624-632). So the assistant almost never hears about edits made by hand in JASP's
+    window, and the -32001 "state changed" check rarely fires. The assistant re-reads `jasp_get_analyses_state`.
+  - a fixed 60 s HTTP timeout (`jasp_client.py` line 29), no environment variable or argument (only `--url` /
+    `JASP_RPC_URL`). A longer call fails with an empty message while JASP keeps running (verified against the
+    stand-in). The assistant keeps `timeoutMs` at 45000 or lower and polls `jasp_analysis_results`. Codex's
+    own limit (`tool_timeout_sec`, default 60) is set to 120 (`workspace.CODEX_TOOL_TIMEOUT`, accepted by Codex
+    0.169) so jasp-mcp's answer arrives first. Claude Code's limit (`MCP_TOOL_TIMEOUT`) defaults to 1e8 ms in
+    2.1.330, so `.mcp.json` sets none.
+  - parallel calls collide: JASP answers the second with -32000 (verified). The assistant calls one at a time.
+  - errors come back as normal results (`isError` false) without `error.data`; a timeout's message is empty.
+  - started before JASP, jasp-mcp has no tools until the client acts on `tools/list_changed`. `full-fat launch`
+    pings JASP (`jasp.ping`, which wants a `result`) before it starts the chat, and the first `tools/list`
+    discovers the tools.
 - **Inner variable boxes are dropped silently** when set in the same `analysis_run` as the main boxes they take
   their variables from (Process `processModels[].modelNumberIndependent`/`modelNumberModeratorW` with
   `covariates`/`factors`); a second run keeps them. JASP's option descriptions (`optionMeta`) leave out TabView

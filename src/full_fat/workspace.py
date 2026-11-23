@@ -32,10 +32,14 @@ from pathlib import Path
 from . import __version__
 from .prompts import Prompts
 
-JASP_MCP_SHA = "72d9d7be9c003b9681b40871ee5850795108e5ab"  # jasp-stats/jasp-mcp, 2026-05-13
+# jasp-stats/jasp-mcp pull request #2 (2026-11-03, on top of main 72d9d7be): a busy JASP no longer makes the
+# connector drop all its tools. The commit is on a fork, but GitHub serves it from jasp-stats' archive link too
+# (it is kept as the pull request's ref, refs/pull/2/head). Move to main once #2 is merged.
+JASP_MCP_SHA = "6f675f63977073d342a5f1998fe99c3511190924"
 # jasp-mcp crashes with the MCP Python SDK 2.x ("'Server' object has no attribute 'list_tools'"),
-# so uvx is told to use mcp<2. It is fetched as a GitHub archive, not git+https, because fresh Macs and
-# Windows PCs have no git (on a Mac, calling git opens Apple's "install developer tools" dialog instead).
+# so uvx is told to use mcp<2 (pull request #1, not merged yet). It is fetched as a GitHub archive, not
+# git+https, because fresh Macs and Windows PCs have no git (on a Mac, calling git opens Apple's "install
+# developer tools" dialog instead).
 JASP_MCP_URL = f"https://github.com/jasp-stats/jasp-mcp/archive/{JASP_MCP_SHA}.zip"
 # Compiled packages are taken only as ready-made wheels: if the newest version has none for this computer, uv
 # picks the newest one that does (for example cryptography 50.0.2 has no wheel for Intel Macs, so they get
@@ -44,6 +48,9 @@ JASP_MCP_URL = f"https://github.com/jasp-stats/jasp-mcp/archive/{JASP_MCP_SHA}.z
 WHEEL_ONLY = ["cryptography", "cffi", "pydantic-core", "rpds-py"]
 UVX_ARGS = [a for p in WHEEL_ONLY for a in ("--no-build-package", p)] + [
     "--with", "mcp<2", "--from", f"jasp-mcp @ {JASP_MCP_URL}", "jasp-mcp"]
+# jasp-mcp gives up on a JASP call after a fixed 60 s, with no setting to change that. Codex's own limit for a
+# tool call (tool_timeout_sec, default 60 s) is set above it, so the connector's answer always gets through.
+CODEX_TOOL_TIMEOUT = 120
 
 # JASP RPC methods that only read (from rpc_discover on JASP 0.98.1).
 READ_ONLY_TOOLS = [
@@ -192,6 +199,8 @@ def codex_config(uvx: str, host: str, port: int, careful: bool) -> str:
         f"command = {toml_str(uvx)}",
         f"args = [{args}]",
         f'env = {{ JASP_RPC_URL = "http://{host}:{port}/rpc" }}',
+        "# Wait longer than the connector's own 60 s for JASP, so a slow analysis gets a proper answer.",
+        f"tool_timeout_sec = {CODEX_TOOL_TIMEOUT}",
     ]
     if careful:
         lines += ["# Careful mode: ask before anything that changes JASP. Reading runs without asking."]

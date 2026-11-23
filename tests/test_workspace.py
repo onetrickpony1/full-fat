@@ -50,7 +50,7 @@ def test_mcp_and_codex(tmp_path, p):
     wheels = [a for p in ("cryptography", "cffi", "pydantic-core", "rpds-py") for a in ("--no-build-package", p)]
     assert mcp["args"] == wheels + ["--with", "mcp<2", "--from",
                                     "jasp-mcp @ https://github.com/jasp-stats/jasp-mcp/archive/"
-                                    "72d9d7be9c003b9681b40871ee5850795108e5ab.zip", "jasp-mcp"]
+                                    "6f675f63977073d342a5f1998fe99c3511190924.zip", "jasp-mcp"]
     assert "--no-build" not in mcp["args"]  # jasp-mcp itself must still be built from its archive
     assert not any("git+" in a for a in mcp["args"])
     assert mcp["env"] == {"JASP_RPC_URL": "http://127.0.0.1:48164/rpc"}
@@ -68,6 +68,8 @@ def test_mcp_and_codex(tmp_path, p):
     assert codex["web_search"] == "disabled"
     srv = codex["mcp_servers"]["jasp"]
     assert srv["args"] == mcp["args"] and srv["env"] == mcp["env"]
+    # longer than jasp-mcp's own fixed 60 s, so its answer reaches Codex (Codex's default is 60 s)
+    assert srv["tool_timeout_sec"] == 120 and "timeout" not in mcp
     assert srv["default_tools_approval_mode"] == "prompt"
     assert set(srv["tools"]) == set(workspace.DEFAULT_TOOLS)
     for t in ("jasp_data_load", "jasp_write_report", "jasp_analysis_createAnnotation", "jasp_analysis_composeResults"):
@@ -248,3 +250,15 @@ def test_guidance_on_tools_that_vanish_mid_chat():
     assert "available at the start of the chat" in env
     assert "disappear in the middle of a chat" in env and "come back on their own" in env
     assert "compare the options it returns with what you sent" in env
+
+
+def test_guidance_on_one_call_at_a_time_state_and_slow_calls():
+    # The pinned jasp-mcp sends parallel calls straight to JASP (which refuses all but one), its 2 s ping uses
+    # up JASP's notes about the user's own edits, and it gives up on a call after a fixed 60 s.
+    env = " ".join(workspace.template("environment.md").split())
+    assert "one at a time, never in parallel" in env
+    assert "read JASP's current state with `jasp_get_analyses_state`" in env
+    assert "If the user says they changed something, read it again before you act." in env
+    assert "Keep `timeoutMs` at 45000 or lower" in env and "`jasp_analysis_results`" in env
+    assert "Don't run it again blindly, and don't tell the user to restart." in env
+    assert {"jasp_get_analyses_state", "jasp_analysis_results"} <= set(workspace.READ_ONLY_TOOLS)

@@ -299,13 +299,22 @@ window it ran in.
   On macOS Full Fat sets the carton as the Finder icon of `Full Fat.command`; if that fails, the file keeps
   Terminal's icon. Uninstall removes all of these. The "FF" letters are outlines from the Inter typeface (SIL
   Open Font License 1.1, see `assets/icon/OFL-Inter.txt`).
-- **Two quirks of JASP and its connector** (seen with JASP 0.99.0 and jasp-mcp 72d9d7be). The JASP tools can
-  vanish from the chat for a few seconds just after an analysis runs: jasp-mcp checks JASP every 2 seconds,
-  JASP turns that check away while another call is still running, and jasp-mcp then drops all its tools until
-  the next check works. And boxes inside a model (for example Independent X and Moderator W in a Process
-  model) are emptied without an error when they are set in the same call as the main variable boxes they pick
-  from. The chat folder's instructions tell the assistant to expect both: wait for the tools to come back, set
-  the main boxes first, and check the options JASP sends back after every run.
+- **Quirks of JASP and its connector** (seen with JASP 0.99.0). Full Fat pins jasp-mcp to the JASP team's fix
+  for tools that vanished for a few seconds just after an analysis ran (upstream pull request #2, not merged
+  yet), and keeps it on the MCP Python SDK 1.x. Some quirks remain, and the chat folder's instructions tell the
+  assistant how to handle each one:
+  - JASP takes one call at a time and turns away a second one, so the assistant calls its tools one at a time.
+  - The assistant is rarely told about changes you make in JASP's own window, so it reads JASP's current state
+    before it works on an analysis.
+  - jasp-mcp gives up on a call after 60 seconds, with no setting to change that, while JASP keeps working. The
+    assistant asks for results in steps of 45 seconds at most and checks again, and after an unclear error it
+    reads the results again instead of starting over. Codex is told to wait 120 seconds for a JASP tool, longer
+    than its usual 60.
+  - Boxes inside a model (for example Independent X and Moderator W in a Process model) are emptied without an
+    error when they are set in the same call as the main variable boxes they pick from. The assistant sets the
+    main boxes first and checks the options JASP sends back after every run.
+  - If the chat starts before JASP answers, it has no JASP tools. The Full Fat icon waits until JASP answers
+    before it starts the chat.
 - **Not affiliated with JASP.** Full Fat is not made or endorsed by the JASP team. JASP's prompts are
   downloaded from [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop) (AGPL-3.0) when you
   run setup. The connector is the official [jasp-mcp](https://github.com/jasp-stats/jasp-mcp), pinned to a

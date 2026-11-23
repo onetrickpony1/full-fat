@@ -1,7 +1,19 @@
 """Fetch the real prompts from GitHub. Run locally with: pytest -m network"""
 import pytest
 
+import urllib.request
+
+from full_fat import workspace
 from full_fat.prompts import load_prompts
+
+
+@pytest.mark.network
+def test_pinned_connector_archive_downloads():
+    # The pin is a pull request's commit (jasp-stats/jasp-mcp #2): GitHub must still serve it by hash from the
+    # jasp-stats link, or setup's connector start fails for everyone.
+    with urllib.request.urlopen(workspace.JASP_MCP_URL, timeout=60) as r:
+        assert r.status == 200
+        assert r.read(4) == b"PK\x03\x04"
 
 
 @pytest.mark.network
