@@ -243,11 +243,13 @@ window it ran in.
 - **Claude in the browser** is Claude Code's Remote Control: the icon starts `claude --remote-control "Full
   Fat"`. Full Fat first checks that `claude auth status` reports a Claude account sign-in (`authMethod`
   "claude.ai", not an API key or a cloud provider, and no `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` or similar
-  set) and that `claude --help` lists `--remote-control`. Then it hands the Terminal to Claude Code and starts a
-  small helper that opens the browser at the chat's link once Claude Code has it, which it reads from Claude
-  Code's own session record. If that never appears, nothing opens and you find the chat at claude.ai/code. The
-  chat runs on your computer: closing the Terminal window ends it, and `/exit` archives it on claude.ai.
-  Tried on Linux with Claude Code 2.1.330 and a Max plan.
+  set) and that `claude --help` lists `--remote-control`. Then it starts Claude Code in the same Terminal
+  window, waits for it, and opens the browser at the chat's link once Claude Code has it, which it reads from
+  Claude Code's own session record. If that never appears, nothing opens and you find the chat at
+  claude.ai/code. If Claude Code stops with an error within a few seconds (an admin can switch Remote Control
+  off for a Team, Enterprise or Education plan), Full Fat says so and starts the chat again in the Terminal
+  only. The chat runs on your computer: closing the Terminal window ends it, and `/exit` archives it on
+  claude.ai. Tried on Linux with Claude Code 2.1.330 and a Max plan.
 - **Plots in the browser.** The browser only opens files inside the chat folder, and JASP keeps its plots in
   its own temp folder. So while a Claude chat is open in the browser, the same helper copies every PNG below
   JASP's temp folder into `plots/` in the chat folder, at the same path, and the chat links to the copy. The

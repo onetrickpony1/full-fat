@@ -359,6 +359,8 @@ BROWSER_NOTES = [
     "Keep the Terminal window open while you chat: closing it ends the chat.",
     "To finish, type /exit in the Terminal window and press Enter, then close it.",
 ]
+BROWSER_REFUSED = ("Claude did not open the chat in the browser (your Claude plan, or whoever manages it, may "
+                   "not allow that), so the chat starts again and stays in this window.")
 BROWSER_UNAVAILABLE = {
     "account": "Your chat stays in this window: opening it in the browser needs Claude Code signed in with a "
                "Claude Pro or Max account.",
@@ -485,18 +487,34 @@ def cmd_launch(a, ui: UI) -> int:
     else:
         ui.ok("JASP is open and connected. Starting the chat...")
     browser = app.key == "claude" and claude_place(a, st) == "browser" and in_browser(exe, ui)
-    cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder, remote.NAME if browser else None)
     os.chdir(folder)
-    if os.name == "nt":
-        with chat_owns_ctrl_c(), subprocess.Popen(cmd) as p:
-            if browser:
-                remote.start_thread(p, folder, j.plot_dirs)
+    if os.name != "nt":
+        real_terminal_input()
+        if not browser:  # hand the Terminal over to the chat app
+            os.execv(exe, apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder))
+            return 0  # not reached
+    return run_chat(app, exe, folder, j.plot_dirs, browser, ui)
+
+
+def run_chat(app: apps.App, exe: str, folder: Path, plot_dirs: list[Path], browser: bool, ui: UI) -> int:
+    """Run the chat app in this window and wait for it; returns its exit code. With browser, the chat also
+    opens at claude.ai/code (remote.py), and if Claude Code refuses that at once (an admin can switch Remote
+    Control off for a Team, Enterprise or Education plan), the chat starts again in the Terminal only."""
+    cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder, remote.NAME if browser else None)
+    with chat_owns_ctrl_c():
+        started = time.monotonic()
+        with subprocess.Popen(cmd) as p:
+            helper = remote.start_thread(p, folder, plot_dirs) if browser else None
+            code = p.wait()
+        if helper is None:
+            return code
+        opened = helper.finish()
+        if not remote.refused(code, time.monotonic() - started, opened):
+            return code
+        ui.say("")
+        ui.problem(BROWSER_REFUSED)
+        with subprocess.Popen(apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder)) as p:
             return p.wait()
-    real_terminal_input()
-    if browser:
-        remote.start_detached(os.getpid(), folder, j.plot_dirs)
-    os.execv(exe, cmd)
-    return 0  # not reached
 
 
 def _ignore_ctrl_c(signum, frame) -> None:

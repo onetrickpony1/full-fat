@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -126,32 +127,134 @@ def test_launch_command_adds_remote_control_before_the_greeting(tmp_path, monkey
 
 # ---------------------------------------------------------------------------- full-fat launch
 
+REAL_POPEN = subprocess.Popen
+
+
+class FakeChat:
+    """Stand-in for subprocess.Popen: each chat started (no other arguments) ends with the next exit code."""
+
+    def __init__(self, codes):
+        self.codes, self.started = list(codes), []
+
+    def __call__(self, cmd, **kw):
+        if kw:  # not a chat: `claude auth status` and the like
+            return REAL_POPEN(cmd, **kw)
+        self.started.append(cmd)
+        code, pid = self.codes.pop(0), 4000 + len(self.started)
+
+        class P:
+            def __init__(p):
+                p.pid, p.returncode = pid, None
+
+            def wait(p):
+                p.returncode = code
+                return code
+
+            def poll(p):
+                return p.returncode
+
+            def __enter__(p):
+                return p
+
+            def __exit__(p, *exc):
+                return False
+        return P()
+
+
+class FakeHelper:
+    def __init__(self, proc, folder, opened=None):
+        self.proc, self.folder, self.opened, self.finished = proc, folder, opened, False
+
+    def finish(self):
+        self.finished = True
+        return self.opened
+
+
 @pytest.fixture
 def launch(env, monkeypatch):
-    """full-fat launch with everything faked; returns what it would exec and the helpers it started."""
+    """full-fat launch with everything faked; returns what it would exec, the chats it would start (a browser
+    chat runs while Full Fat waits) and the helpers it started."""
     tmp_path, conf = env
     w, seen = launch_world(env, monkeypatch)
     helpers = []
-    monkeypatch.setattr(remote, "start_detached", lambda pid, folder, dirs: helpers.append((pid, folder)))
-    return tmp_path, seen, helpers
+    chats = FakeChat([0])
+    monkeypatch.setattr(cli.subprocess, "Popen", chats)
+
+    def start(proc, folder, dirs):
+        helpers.append(FakeHelper(proc, folder))
+        return helpers[-1]
+    monkeypatch.setattr(remote, "start_thread", start)
+    return tmp_path, seen, helpers, chats
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows runs the chat app with subprocess instead of exec")
 def test_launch_opens_claude_in_the_browser_by_default(launch, monkeypatch, capsys):
-    tmp_path, seen, helpers = launch
+    tmp_path, seen, helpers, chats = launch
     monkeypatch.setattr(remote, "unavailable", lambda exe: None)
     assert cli.main(["launch", "--yes"]) == 0
-    assert seen["cmd"][-3:] == ["--remote-control", "Full Fat", prompts.INTRO_MESSAGE]
-    assert helpers == [(os.getpid(), tmp_path / "ws")]
+    assert "cmd" not in seen  # Full Fat waits for this chat instead of handing over the process
+    assert chats.started[0][-3:] == ["--remote-control", "Full Fat", prompts.INTRO_MESSAGE]
+    assert len(chats.started) == 1
+    assert [(h.proc.pid, h.folder, h.finished) for h in helpers] == [(4001, tmp_path / "ws", True)]
     out = " ".join(capsys.readouterr().out.split())
     assert "also opens in your web browser" in out and "https://claude.ai/code" in out
     assert "closing it ends the chat" in out and "/exit" in out and "sign in to claude.ai" in out
 
 
+def test_a_refused_browser_chat_starts_again_in_the_terminal(launch, monkeypatch, capsys):
+    tmp_path, seen, helpers, chats = launch
+    monkeypatch.setattr(remote, "unavailable", lambda exe: None)
+    chats.codes = [1, 7]  # Remote Control refused at once, then the Terminal chat ends with 7
+    assert cli.main(["launch", "--yes"]) == 7
+    assert len(chats.started) == 2 and "--remote-control" in chats.started[0]
+    assert "--remote-control" not in chats.started[1] and chats.started[1][-1] == prompts.INTRO_MESSAGE
+    assert helpers[0].finished and len(helpers) == 1  # the browser helper stopped, no new one
+    assert "stays in this window" in " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize("code", [0, 130])
+def test_quitting_a_browser_chat_at_once_does_not_start_it_again(launch, monkeypatch, capsys, code):
+    tmp_path, seen, helpers, chats = launch
+    monkeypatch.setattr(remote, "unavailable", lambda exe: None)
+    chats.codes = [code]
+    assert cli.main(["launch", "--yes"]) == code
+    assert len(chats.started) == 1
+    assert "stays in this window" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("code,seconds,opened,expected", [
+    (1, 3, None, True), (2, 14, None, True),
+    (0, 3, None, False),             # quit normally
+    (130, 3, None, False), (0xC000013A, 3, None, False), (-2, 3, None, False),  # Ctrl+C or a signal
+    (1, 60, None, False),            # ran for a while: an error during the chat, not a refusal
+    (1, 3, "https://claude.ai/code/session_x", False),  # it did open in the browser
+])
+def test_refused_tells_a_refusal_from_a_normal_end(code, seconds, opened, expected):
+    assert remote.refused(code, seconds, opened) is expected
+
+
+def test_the_helper_thread_stops_when_asked_and_reports_the_link(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    class Running:
+        pid = 4321
+
+        def poll(self):
+            return None  # Claude Code still runs; finish() must stop the helper anyway
+    write_session(tmp_path / "cfg", 4321, bridgeSessionId="session_01GJRQ6enC4B5E8duDNG3uJ2")
+    opened = []
+    monkeypatch.setattr(apps, "open_link", opened.append)
+    h = remote.start_thread(Running(), tmp_path, [])
+    deadline = time.monotonic() + 10
+    while not opened and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert h.finish() == "https://claude.ai/code/session_01GJRQ6enC4B5E8duDNG3uJ2"
+    assert not h.is_alive()
+
+
 @pytest.mark.skipif(os.name == "nt", reason="Windows runs the chat app with subprocess instead of exec")
 @pytest.mark.parametrize("why", ["account", "old"])
 def test_launch_keeps_the_terminal_when_the_browser_is_unavailable(launch, monkeypatch, capsys, why):
-    tmp_path, seen, helpers = launch
+    tmp_path, seen, helpers, chats = launch
     monkeypatch.setattr(remote, "unavailable", lambda exe: why)
     assert cli.main(["launch", "--yes"]) == 0
     assert "--remote-control" not in seen["cmd"] and seen["cmd"][-1] == prompts.INTRO_MESSAGE
@@ -161,7 +264,7 @@ def test_launch_keeps_the_terminal_when_the_browser_is_unavailable(launch, monke
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows runs the chat app with subprocess instead of exec")
 def test_open_in_terminal_keeps_claude_in_the_terminal(launch, monkeypatch):
-    tmp_path, seen, helpers = launch
+    tmp_path, seen, helpers, chats = launch
     monkeypatch.setattr(remote, "unavailable", lambda exe: pytest.fail("checked the browser"))
     assert cli.main(["launch", "--yes", "--open-in", "terminal"]) == 0
     assert "--remote-control" not in seen["cmd"] and helpers == []
@@ -170,7 +273,7 @@ def test_open_in_terminal_keeps_claude_in_the_terminal(launch, monkeypatch):
     assert "--remote-control" not in seen["cmd"] and helpers == []
     monkeypatch.setattr(remote, "unavailable", lambda exe: None)
     assert cli.main(["launch", "--yes", "--open-in", "browser"]) == 0
-    assert "--remote-control" in seen["cmd"]
+    assert "--remote-control" in chats.started[-1]
 
 
 def test_setup_remembers_where_claude_chats_open(env, capsys):
@@ -184,12 +287,3 @@ def test_setup_remembers_where_claude_chats_open(env, capsys):
     assert "Claude chats also open in your web browser" not in capsys.readouterr().out
     assert cli.main(setup_args(tmp_path, conf, "--open-in", "app")) == 0  # a ChatGPT choice: Claude's stays
     assert state.load()["claude_in"] == "terminal"
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX helper")
-def test_the_detached_helper_does_not_stay_a_child(tmp_path, monkeypatch):
-    """start_detached returns at once and leaves no child process behind (the helper belongs to init)."""
-    monkeypatch.setattr(remote, "watch", lambda *a, **k: None)
-    assert remote.start_detached(os.getpid(), tmp_path, []) is True
-    with pytest.raises(ChildProcessError):
-        os.waitpid(-1, os.WNOHANG)

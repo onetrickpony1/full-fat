@@ -168,12 +168,19 @@ in `claude --help`. Otherwise the chat stays in the Terminal with a plain messag
 2.1.330 (Max): the session is listed as "Full Fat" at claude.ai/code, approvals are buttons there, `/exit`
 archives it, closing the Terminal ends it, and the flag left `remoteEnabled` (Claude's "all sessions" setting)
 false.
-- Opening the browser: Full Fat execs Claude Code (same PID), so just before that `remote.start_detached` double
-  forks a helper that polls `<CLAUDE_CONFIG_DIR or ~/.claude>/sessions/<pid>.json` for `bridgeSessionId` and
-  opens `https://claude.ai/code/<id>` with the system's opener, then exits with Claude Code. That file is
-  Claude Code's internal record: if it changes, nothing opens and the Terminal text says where to look. Reading
-  Claude's printed link instead would need a pty proxy between Claude Code and the Terminal. Windows uses a
-  thread while Full Fat waits for Claude Code.
+- Opening the browser: Full Fat starts Claude Code as a child in the same Terminal and waits for it
+  (`cli.run_chat`); only the Terminal-only chat on Linux and macOS is still exec'd. A helper thread
+  (`remote.Helper`) polls `<CLAUDE_CONFIG_DIR or ~/.claude>/sessions/<child pid>.json` for `bridgeSessionId` and
+  opens `https://claude.ai/code/<id>` with the system's opener, until Claude Code ends. That file is Claude
+  Code's internal record: if it changes, nothing opens and the Terminal text says where to look. Reading
+  Claude's printed link instead would need a pty proxy between Claude Code and the Terminal.
+- Full Fat waits instead of exec'ing so it can catch a refused Remote Control (Team, Enterprise and Education
+  admins can switch it off; only Max was tried): a non-zero exit within `remote.QUICK_EXIT` seconds, not a
+  Ctrl+C code, with nothing opened (`remote.refused`), stops the helper and starts the chat again without
+  `--remote-control`, with a plain message. A quick `/exit` (code 0) starts nothing.
+- While Full Fat waits for a chat app (`cli.chat_owns_ctrl_c`, also the Windows Terminal chats), Ctrl+C runs a
+  do-nothing handler, so only the chat app reacts and Full Fat returns its exit code. A handler, not
+  `SIG_IGN`, because an ignored signal is inherited by the child.
 - A session record only exists for a top-level Claude Code: started from inside another Claude Code session
   (CLAUDECODE and friends set), none is written. Unset those variables for a live test.
 - The browser opens in the default browser. If that browser isn't signed in to claude.ai it shows a sign-in

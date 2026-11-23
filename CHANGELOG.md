@@ -45,8 +45,10 @@
 - **Claude chats also open in your web browser.** Before, a Claude chat was only in the Terminal window. Now
   it also opens at claude.ai/code, called "Full Fat", where you can read and type, with tables as tables
   and approval questions as buttons. The Terminal window keeps it running. If your Claude Code is too old or
-  isn't signed in with a Claude account, the chat stays in the Terminal as before. `--open-in terminal`
-  keeps it there.
+  isn't signed in with a Claude account, or your plan's admin has switched this off, the chat stays in
+  the Terminal as before (after a refusal Full Fat says so and starts the chat again there). This is the new
+  default for everyone, also if you set up Full Fat before and don't run setup again. To keep Claude chats in
+  the Terminal, run `full-fat setup --open-in terminal`, or `full-fat launch --open-in terminal` for one chat.
 - **Plots show in the browser.** Before, a plot link in a Claude chat on claude.ai/code said "Couldn't load
   this file", because JASP keeps plots outside the chat folder. Now Full Fat copies JASP's plots into the
   chat folder's `plots` folder while the chat runs, and the chat links to the copy, which opens when you

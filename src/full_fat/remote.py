@@ -6,14 +6,19 @@ plan). Approval questions show in both places. Closing the Terminal ends the cha
 archives the browser session. It needs a Pro or Max plan signed in with a Claude account: not an API key, not
 a custom ANTHROPIC_BASE_URL or a cloud provider. On Team and Enterprise plans an admin must allow it.
 
-How the browser opens: Full Fat hands the Terminal over to Claude Code (exec, so Claude Code keeps the same
-process ID and the Terminal works as usual). Just before that it starts a small helper of its own, detached
-from the Terminal, that waits until Claude Code records the browser session for that process and then opens
-it. Claude Code 2.1.330 writes `<config dir>/sessions/<pid>.json` with `bridgeSessionId` ("session_...") once
+How the browser opens: Full Fat starts Claude Code in the same Terminal window and waits for it (the Terminal
+works as usual: Claude Code reads and writes it directly, and Full Fat leaves Ctrl+C to it). Meanwhile a helper
+thread of Full Fat waits until Claude Code records the browser session for its process and then opens it.
+Claude Code 2.1.330 writes `<config dir>/sessions/<pid>.json` with `bridgeSessionId` ("session_...") once
 Remote Control is connected; https://claude.ai/code/<that ID> is the link Claude Code itself prints. That file
 is Claude Code's own and may change, so when it never shows up the helper opens nothing, and the Terminal text
 tells the user where to find the chat. Reading Claude Code's printed link instead would need Full Fat to sit
 between Claude Code and the Terminal, which breaks the Terminal chat on some systems.
+
+Full Fat waits rather than handing the process over (exec) so that it can tell when Claude Code refuses Remote
+Control (an admin can switch it off for a Team, Enterprise or Education plan; only a Max plan was tried): if
+Claude Code ends with an error within a few seconds and nothing opened, Full Fat starts the chat again in the
+Terminal only (cli.run_chat, refused below).
 
 The same helper copies JASP's plot images into the chat folder while the chat runs (plots.py), because the
 browser only opens files inside the folder the chat runs in. It stops when Claude Code ends.
@@ -84,7 +89,7 @@ def session_url(pid: int, since: float, config: Path | None = None) -> str | Non
 
 def alive(pid: int) -> bool:
     if os.name == "nt":
-        return True  # the Windows helper is a thread that stops when the chat ends (see start_thread)
+        return True  # os.kill would end the process on Windows; the helper passes still_running there
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -117,38 +122,43 @@ def watch(pid: int, folder: Path, plot_dirs: list[Path], since: float, still_run
     return opened
 
 
-def start_detached(pid: int, folder: Path, plot_dirs: list[Path]) -> bool:
-    """Start the helper as its own process, apart from the Terminal (POSIX). The caller then execs Claude Code,
-    which keeps pid. A double fork, so the helper never waits as a child of Claude Code."""
-    since = time.time()
-    try:
-        child = os.fork()
-    except OSError:
-        return False
-    if child:
+QUICK_EXIT = 15  # seconds: a chat that ends with an error this soon was refused, not used
+CTRL_C_EXITS = (130, 0xC000013A)  # quitting with Ctrl+C (POSIX shells, Windows)
+
+
+def refused(code: int, seconds: float, opened: str | None) -> bool:
+    """Did Claude Code refuse Remote Control? An admin can switch it off for a Team, Enterprise or Education
+    plan; then `claude --remote-control` stops with an error before the student could have chatted. A chat
+    that ended normally (0), with Ctrl+C or by a signal, that ran longer, or that opened in the browser was
+    not refused."""
+    return code > 0 and code not in CTRL_C_EXITS and seconds < QUICK_EXIT and not opened
+
+
+class Helper(threading.Thread):
+    """The helper as a thread of Full Fat, which waits for Claude Code to finish."""
+
+    def __init__(self, proc: subprocess.Popen, folder: Path, plot_dirs: list[Path]):
+        super().__init__(daemon=True)
+        self.proc, self.folder, self.plot_dirs = proc, folder, plot_dirs
+        self.since = time.time()
+        self.stop = threading.Event()
+        self.opened: str | None = None
+
+    def run(self) -> None:
         try:
-            os.waitpid(child, 0)
-        except OSError:
+            self.opened = watch(self.proc.pid, self.folder, self.plot_dirs, self.since,
+                                still_running=lambda: self.proc.poll() is None and not self.stop.is_set())
+        except Exception:  # noqa: BLE001  # the helper must never fail into the chat
             pass
-        return True
-    try:  # first child: leave the Terminal's session, fork the helper and exit at once
-        os.setsid()
-        if os.fork():
-            os._exit(0)
-        null = os.open(os.devnull, os.O_RDWR)
-        for fd in (0, 1, 2):
-            os.dup2(null, fd)
-        time.sleep(0.5)  # let the exec happen first
-        watch(pid, folder, plot_dirs, since)
-    except BaseException:  # noqa: BLE001  # the helper must never fail into the Terminal
-        pass
-    os._exit(0)
+
+    def finish(self, timeout: float = 5) -> str | None:
+        """Stop the helper (after a last copy of the plots) and return the link it opened, if any."""
+        self.stop.set()
+        self.join(timeout)
+        return self.opened
 
 
-def start_thread(proc: subprocess.Popen, folder: Path, plot_dirs: list[Path]) -> threading.Thread:
-    """The helper as a thread of this process, for Windows, where Full Fat waits for Claude Code to finish."""
-    since = time.time()
-    t = threading.Thread(target=watch, args=(proc.pid, folder, plot_dirs, since),
-                         kwargs={"still_running": lambda: proc.poll() is None}, daemon=True)
+def start_thread(proc: subprocess.Popen, folder: Path, plot_dirs: list[Path]) -> Helper:
+    t = Helper(proc, folder, plot_dirs)
     t.start()
     return t
