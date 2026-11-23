@@ -11,7 +11,7 @@ import time
 import urllib.error
 from pathlib import Path
 
-from . import __version__, apps, connector, jasp, launcher, link, prompts, remote, state, workspace
+from . import __version__, apps, connector, jasp, launcher, link, plots, prompts, remote, state, workspace
 from .ui import UI, keep, waiting
 
 GITHUB = "https://github.com/onetrickpony1/full-fat"
@@ -488,11 +488,11 @@ def cmd_launch(a, ui: UI) -> int:
     if os.name == "nt":
         with subprocess.Popen(cmd) as p:
             if browser:
-                remote.start_thread(p)
+                remote.start_thread(p, folder, j.plot_dirs)
             return p.wait()
     real_terminal_input()
     if browser:
-        remote.start_detached(os.getpid())
+        remote.start_detached(os.getpid(), folder, j.plot_dirs)
     os.execv(exe, cmd)
     return 0  # not reached
 
@@ -661,7 +661,7 @@ def remove_chat_folder(folder: Path, ui: UI) -> None:
         if p.is_file() and not p.is_symlink() and folder.resolve() in p.resolve().parents:
             text = p.read_text(encoding="utf-8", errors="replace")
             (ours if workspace.sha(text) == digest else changed).append(p)
-    listed = {folder / rel for rel in files} | {folder / workspace.MANIFEST}
+    listed = {folder / rel for rel in files} | {folder / workspace.MANIFEST} | set(plots.copies(folder))
     other = 0
     for root, dirs, names in os.walk(folder):
         for n in names + [d for d in dirs if os.path.islink(os.path.join(root, d))]:
@@ -673,6 +673,7 @@ def remove_chat_folder(folder: Path, ui: UI) -> None:
     if not ui.yes_no(f"Delete the files Full Fat made in {keep(folder)}?", True, on_eof=False):
         ui.say(f"  Kept {keep(folder)}")
         return
+    plots.clear(folder)  # the plot copies made for the browser
     for p in ours + [folder / workspace.MANIFEST]:
         try:
             p.unlink()

@@ -92,6 +92,8 @@ def test_session_url_uses_claude_config_dir(tmp_path, monkeypatch):
 
 def test_watch_opens_the_chat_once_and_stops_with_the_chat(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
+    folder = tmp_path / "ws"
+    folder.mkdir()
     ticks = {"n": 0}
 
     def running():
@@ -100,7 +102,8 @@ def test_watch_opens_the_chat_once_and_stops_with_the_chat(tmp_path, monkeypatch
             write_session(tmp_path / "cfg", 11, bridgeSessionId="session_01GJRQ6enC4B5E8duDNG3uJ2")
         return ticks["n"] < 8
     opened = []
-    url = remote.watch(11, time.time(), still_running=running, open_link=opened.append, sleep=lambda s: None)
+    url = remote.watch(11, folder, [], time.time(), still_running=running, open_link=opened.append,
+                       sleep=lambda s: None)
     assert opened == ["https://claude.ai/code/session_01GJRQ6enC4B5E8duDNG3uJ2"] == [url]
 
 
@@ -108,7 +111,7 @@ def test_watch_opens_nothing_when_claude_code_never_connects(tmp_path, monkeypat
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
     ticks = iter(range(5))
     opened = []
-    assert remote.watch(12, time.time(), still_running=lambda: next(ticks) < 4,
+    assert remote.watch(12, tmp_path, [], time.time(), still_running=lambda: next(ticks) < 4,
                         open_link=opened.append, sleep=lambda s: None) is None
     assert opened == []
 
@@ -129,7 +132,7 @@ def launch(env, monkeypatch):
     tmp_path, conf = env
     w, seen = launch_world(env, monkeypatch)
     helpers = []
-    monkeypatch.setattr(remote, "start_detached", lambda pid: helpers.append(pid))
+    monkeypatch.setattr(remote, "start_detached", lambda pid, folder, dirs: helpers.append((pid, folder)))
     return tmp_path, seen, helpers
 
 
@@ -139,7 +142,7 @@ def test_launch_opens_claude_in_the_browser_by_default(launch, monkeypatch, caps
     monkeypatch.setattr(remote, "unavailable", lambda exe: None)
     assert cli.main(["launch", "--yes"]) == 0
     assert seen["cmd"][-3:] == ["--remote-control", "Full Fat", prompts.INTRO_MESSAGE]
-    assert helpers == [os.getpid()]
+    assert helpers == [(os.getpid(), tmp_path / "ws")]
     out = " ".join(capsys.readouterr().out.split())
     assert "also opens in your web browser" in out and "https://claude.ai/code" in out
     assert "closing it ends the chat" in out and "/exit" in out and "sign in to claude.ai" in out
@@ -187,6 +190,6 @@ def test_setup_remembers_where_claude_chats_open(env, capsys):
 def test_the_detached_helper_does_not_stay_a_child(tmp_path, monkeypatch):
     """start_detached returns at once and leaves no child process behind (the helper belongs to init)."""
     monkeypatch.setattr(remote, "watch", lambda *a, **k: None)
-    assert remote.start_detached(os.getpid()) is True
+    assert remote.start_detached(os.getpid(), tmp_path, []) is True
     with pytest.raises(ChildProcessError):
         os.waitpid(-1, os.WNOHANG)

@@ -133,6 +133,14 @@ What CI proves, and only this:
   and app-server `config/read` load the file with an empty CODEX_HOME and with the app's own config, and a chat
   opened in the app had none of those tools and ran at high effort.
 - `jasp/`: the downloaded prompts and `source.txt`. `.full-fat.json`: the manifest.
+- `plots/` (only while or after a browser chat): copies of JASP's plot PNGs, made by `plots.Copier` in the
+  Remote Control helper (`remote.watch`), at their path below JASP's temp folder (`.../temp/4/resources/1/x.png`
+  becomes `plots/4/resources/1/x.png`). `plots/.full-fat-plots.json` lists them with hashes. Never a symlink,
+  never over a file Full Fat didn't copy. The next browser chat and uninstall delete unchanged copies. Checked
+  in claude.ai/code on 2026-11-23: a link to a real file in the folder opens (relative or absolute path); JASP's
+  own path shows "Couldn't load this file"; a symlink in the folder does nothing, and Read asks for it as
+  outside the folder. So copy, don't link, and don't widen Claude's write access. `templates/environment.md`
+  tells the assistant to read the copy and link to it.
 
 ## The ChatGPT app route
 

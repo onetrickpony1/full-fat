@@ -14,7 +14,9 @@ Remote Control is connected; https://claude.ai/code/<that ID> is the link Claude
 is Claude Code's own and may change, so when it never shows up the helper opens nothing, and the Terminal text
 tells the user where to find the chat. Reading Claude Code's printed link instead would need Full Fat to sit
 between Claude Code and the Terminal, which breaks the Terminal chat on some systems.
-It stops when Claude Code ends.
+
+The same helper copies JASP's plot images into the chat folder while the chat runs (plots.py), because the
+browser only opens files inside the folder the chat runs in. It stops when Claude Code ends.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import apps
+from . import apps, plots
 
 NAME = "Full Fat"  # the name the chat has at claude.ai/code
 CODE_URL = "https://claude.ai/code"
@@ -92,22 +94,30 @@ def alive(pid: int) -> bool:
     return True
 
 
-def watch(pid: int, since: float, still_running=None, open_link=None, interval: float = 1.0,
-          wait: float = WAIT_FOR_SESSION, clock=time.monotonic, sleep=time.sleep) -> str | None:
-    """Open the chat in the browser once Claude Code has it. Returns the link it opened, if any."""
+def watch(pid: int, folder: Path, plot_dirs: list[Path], since: float, still_running=None,
+          open_link=None, interval: float = 1.0, wait: float = WAIT_FOR_SESSION,
+          clock=time.monotonic, sleep=time.sleep) -> str | None:
+    """Open the chat in the browser once Claude Code has it, and copy JASP's plots into the folder, until the
+    chat ends. Returns the link it opened, if any."""
     still_running = still_running or (lambda: alive(pid))
     open_link = open_link or apps.open_link
+    copier = plots.Copier(plot_dirs, folder)
+    copier.clear_earlier()
+    opened = None
     end_wait = clock() + wait
-    while still_running() and clock() < end_wait:
-        url = session_url(pid, since)
-        if url:
-            open_link(url)
-            return url
+    while still_running():
+        if opened is None and clock() < end_wait:
+            url = session_url(pid, since)
+            if url:
+                open_link(url)
+                opened = url
+        copier.sync()
         sleep(interval)
-    return None
+    copier.sync()
+    return opened
 
 
-def start_detached(pid: int) -> bool:
+def start_detached(pid: int, folder: Path, plot_dirs: list[Path]) -> bool:
     """Start the helper as its own process, apart from the Terminal (POSIX). The caller then execs Claude Code,
     which keeps pid. A double fork, so the helper never waits as a child of Claude Code."""
     since = time.time()
@@ -129,16 +139,16 @@ def start_detached(pid: int) -> bool:
         for fd in (0, 1, 2):
             os.dup2(null, fd)
         time.sleep(0.5)  # let the exec happen first
-        watch(pid, since)
+        watch(pid, folder, plot_dirs, since)
     except BaseException:  # noqa: BLE001  # the helper must never fail into the Terminal
         pass
     os._exit(0)
 
 
-def start_thread(proc: subprocess.Popen) -> threading.Thread:
+def start_thread(proc: subprocess.Popen, folder: Path, plot_dirs: list[Path]) -> threading.Thread:
     """The helper as a thread of this process, for Windows, where Full Fat waits for Claude Code to finish."""
     since = time.time()
-    t = threading.Thread(target=watch, args=(proc.pid, since),
+    t = threading.Thread(target=watch, args=(proc.pid, folder, plot_dirs, since),
                          kwargs={"still_running": lambda: proc.poll() is None}, daemon=True)
     t.start()
     return t

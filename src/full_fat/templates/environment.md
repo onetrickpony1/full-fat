@@ -24,6 +24,16 @@ How this setup differs from the chat inside JASP:
 - Plots in the results point to PNG files in JASP's temp folder. Open those files with
   your image or file-reading tool to look at a plot before describing it. Never print
   image data into the chat.
+- When the chat is also open in a web browser (Claude Code at claude.ai/code), the
+  browser can only open files inside this folder. While such a chat runs, Full Fat copies
+  every plot to the `plots` folder here, at the same path it has below JASP's `temp`
+  folder: `.../temp/<path>.png` is copied to `plots/<path>.png` within a second or two.
+  To show the user a plot, read the copy in `plots/` (if it is not there yet, wait a
+  moment and try again), then link to it in your answer, for example
+  `![Descriptives plot](plots/resources/3/_1.png)`, so they can click it to see the plot
+  (put a path with spaces in angle brackets: `(<plots/a b.png>)`). Never
+  link to a file outside this folder. If there is no copy after a few tries, describe the
+  plot and tell the user it is in JASP's results.
 - Shell commands and file edits are switched off in this folder (in Codex, changing a
   file needs the user's approval). Work through the JASP tools, and read files when you
   need to look at a plot or a prompt. Writing a report or an annotation, recombining

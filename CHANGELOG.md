@@ -47,6 +47,10 @@
   and approval questions as buttons. The Terminal window keeps it running. If your Claude Code is too old or
   isn't signed in with a Claude account, the chat stays in the Terminal as before. `--open-in terminal`
   keeps it there.
+- **Plots show in the browser.** Before, a plot link in a Claude chat on claude.ai/code said "Couldn't load
+  this file", because JASP keeps plots outside the chat folder. Now Full Fat copies JASP's plots into the
+  chat folder's `plots` folder while the chat runs, and the chat links to the copy, which opens when you
+  click it.
 
 ### Fixes
 - **Codex chats in the ChatGPT app start at high effort and without the app's extra tools.** Before, a chat

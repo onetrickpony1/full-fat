@@ -72,6 +72,7 @@ Start a chat now? [Y/n]
 - **Claude in your browser too.** A Claude chat also opens at claude.ai/code, as "Full Fat", where tables
   show as tables and approval questions are buttons. The Terminal window keeps the chat running. If your
   Claude Code or your sign-in can't do that, the chat stays in the Terminal.
+- **Plots in the browser.** When the chat shows you a plot, click its link to see it.
 - **ChatGPT in the ChatGPT app.** If the app is installed, ChatGPT chats open on its Codex side instead of in
   a Terminal window, with the same JASP tools and the same rules. The Terminal stays as the fallback.
 - **Analyses without asking, the rest asks first.** Creating and running analyses and reading results run
@@ -145,6 +146,7 @@ can read and type there instead of in the Terminal window. The Terminal window s
 - Keep the Terminal window open: closing it ends the chat. To finish, type `/exit` in the Terminal window
   and press Enter, then close it.
 - If the browser doesn't open by itself, go to https://claude.ai/code and click "Full Fat".
+- When Claude shows you a plot, it gives a link with the plot's name. Click it to see the plot.
 
 This needs a Claude Pro or Max plan, with Claude Code signed in through your Claude account, and a recent
 Claude Code. If that isn't the case, Full Fat says so and the chat stays in the Terminal. On a Team or
@@ -246,6 +248,11 @@ window it ran in.
   Code's own session record. If that never appears, nothing opens and you find the chat at claude.ai/code. The
   chat runs on your computer: closing the Terminal window ends it, and `/exit` archives it on claude.ai.
   Tried on Linux with Claude Code 2.1.330 and a Max plan.
+- **Plots in the browser.** The browser only opens files inside the chat folder, and JASP keeps its plots in
+  its own temp folder. So while a Claude chat is open in the browser, the same helper copies every PNG below
+  JASP's temp folder into `plots/` in the chat folder, at the same path, and the chat links to the copy. The
+  chat itself still can't write files. The next browser chat and `full-fat uninstall` delete the copies, but
+  not a file you changed or put there. The ChatGPT app shows plots itself, so nothing changes there.
 - **Models.** The icon starts the chat on Opus (Claude Code) or GPT-6.2 Astra (Codex) at high effort, by
   passing them when it starts the app. It leaves them out when your own settings already choose a model or
   an effort: when you pick a model with `/model` in Claude Code, Claude saves it as your default, and the
