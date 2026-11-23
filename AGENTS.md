@@ -35,7 +35,9 @@ Project-specific rules. General repo rules are in the owner's conventions file.
 - **The chat folder's name has a space** (`Full Fat`). Quote it in every script and command, and wrap paths in
   `ui.keep()` in messages, or the line wrapping splits them.
 - **Launchers are only removed or replaced if the state key `launchers` records them** and they still hold
-  Full Fat's mark (`launcher.MARKS`). Never look for launchers by name.
+  Full Fat's mark (`launcher.MARKS`; a Windows `.lnk` holds it in its UTF-16 description). Icon pictures
+  Full Fat installs (Linux hicolor PNGs, the Windows `.ico`) are recorded there too and removed only while they
+  are byte for byte Full Fat's. Never look for launchers by name.
 - Plain English in every message a user sees. No "MCP", "RPC" or "config" in setup messages (README Notes and
   code comments may use them).
 
@@ -82,8 +84,8 @@ What CI proves, and only this:
 - `test`: the unit tests on three systems.
 - `installer`: `install.sh` / `install.ps1` from the checked-out code (`FULL_FAT_SOURCE`, not the published
   link), git hidden, stand-in JASP settings, stand-in chat apps (`tests/make_stand_in_apps.py`), `--yes`. The
-  icon starts a stand-in chat in the folder (a fake JASP answers the ping), `doctor` must exit 0, uninstall must
-  leave nothing. `install.cmd` is not run.
+  icon starts a stand-in chat in the folder (a fake JASP answers the ping; on Windows through the shortcut's
+  target), `doctor` must exit 0, uninstall must leave nothing (the Linux carton and the Windows shortcut too). `install.cmd` is not run.
 - `connector-intel-mac`: setup's connector start on an Intel Mac.
 - `e2e-macos` (Apple Silicon) and `e2e-windows`: the real JASP 0.99.0, first-start dialog pre-answered.
   `full-fat launch` switches the setting on and JASP starts with its connection (macOS: Full Fat opens it;
@@ -153,6 +155,13 @@ Not found or not opened: the Terminal chat, as before. The app route doesn't nee
   `link.py`: JASP's connection setting (on only while Full Fat opens JASP). `apps.py` also finds and opens the
   ChatGPT desktop app.
 - `jasp.py`: detection per OS, the INI editor and the `Store` (INI file or macOS defaults domain), running and ping.
+- The icon: `assets/icon/` has the SVG sources, their generators and Inter's licence (the "FF" outlines are
+  Inter Black, OFL 1.1). `python3 -I assets/icon/build.py` (rsvg-convert, magick) writes `src/full_fat/icons/`
+  (PNGs, `.ico`, `.icns`), which ships as package data. Linux: hicolor PNGs, `Icon=` is the absolute path of
+  the 256 one. Windows: `Full Fat.lnk` on the Desktop (PowerShell WScript.Shell, paths passed as environment
+  variables) opening `Full Fat.cmd` and the `.ico` in `state.config_dir()`; `.cmd` on the Desktop if that
+  fails. macOS: NSWorkspace `setIcon` through `osascript -l JavaScript`, which nobody has seen work on a real
+  Mac yet (CI only prints the file's extended attributes).
 - `prompts.py`: download and C++ string literal parsing. `workspace.py`: the chat folder. `apps.py`: Claude Code
   and Codex. `launcher.py`: the Full Fat icon. `state.py`: Full Fat's own folder (answers, backups).
 

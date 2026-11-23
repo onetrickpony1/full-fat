@@ -70,16 +70,21 @@ jobs:
           if [ "$RUNNER_OS" = macOS ]; then
             icon="$HOME/Desktop/Full Fat.command"
             test -x "$icon"
+            # the carton as its Finder icon (not checked: shown for the log)
+            xattr -l "$icon" | cut -c1-120 || true
             python3 tests/e2e_check_launcher.py "$icon" "$HOME/Full Fat" --fake-jasp
           else
             icon="$HOME/Desktop/Full Fat.desktop"
             grep -qx 'Name=Full Fat' "$icon"
+            carton="$(sed -n 's/^Icon=//p' "$icon")"
+            test "$carton" = "$HOME/.local/share/icons/hicolor/256x256/apps/full-fat.png" && test -f "$carton"
             python3 tests/e2e_check_launcher.py "$icon" "$HOME/Full Fat" --fake-jasp --double-click
           fi
           if grep -q '^rpcServerEnabled=true' "$RUNNER_TEMP/jasp/JASP.conf"; then echo "setting left on"; exit 1; fi
           "$HOME/.local/bin/full-fat" doctor
           "$HOME/.local/bin/full-fat" uninstall --yes
           if [ -e "$HOME/Full Fat" ] || [ -e "$icon" ]; then echo "uninstall left the folder or icon"; exit 1; fi
+          if [ -n "${carton:-}" ] && [ -e "$carton" ]; then echo "uninstall left the carton icon"; exit 1; fi
           if grep -F "Full Fat']" "$HOME/.codex/config.toml"; then echo "trust entry not removed"; exit 1; fi
           if grep -q '^rpcServerEnabled' "$RUNNER_TEMP/jasp/JASP.conf"; then echo "setting not restored"; exit 1; fi
       - name: install.ps1
@@ -96,15 +101,18 @@ jobs:
           if (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled=true' -Quiet) { Write-Host "setting left on"; exit 1 }
           if (-not (Test-Path "$env:USERPROFILE\Full Fat\AGENTS.md")) { exit 1 }
           $desk = [Environment]::GetFolderPath("Desktop")
-          if (-not (Test-Path "$desk\Full Fat.cmd")) { exit 1 }
-          Get-Content "$desk\Full Fat.cmd"
+          if (-not (Test-Path "$desk\Full Fat.lnk")) { Write-Host "no shortcut"; Get-ChildItem $desk; exit 1 }
+          $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$desk\Full Fat.lnk")
+          Write-Host "shortcut: $($lnk.TargetPath) icon $($lnk.IconLocation)"
+          if (-not (Test-Path $lnk.TargetPath) -or -not (Test-Path ($lnk.IconLocation -replace ',0$', ''))) { exit 1 }
+          Get-Content $lnk.TargetPath
           if (-not (Select-String -Path "$env:USERPROFILE\.codex\config.toml" -SimpleMatch "Full Fat']" -Quiet)) { exit 1 }
           # the command the README gives for opening the folder by hand
           foreach ($shell in "powershell", "pwsh") {
             & $shell -NoProfile -Command 'cd "$HOME/Full Fat"; if (-not (Test-Path .full-fat.json)) { exit 1 }'
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
-          python tests/e2e_check_launcher.py "$desk\Full Fat.cmd" "$env:USERPROFILE\Full Fat" --fake-jasp
+          python tests/e2e_check_launcher.py "$desk\Full Fat.lnk" "$env:USERPROFILE\Full Fat" --fake-jasp
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & "$env:USERPROFILE\.local\bin\full-fat.exe" doctor
           if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -112,7 +120,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if (Select-String -Path "$env:RUNNER_TEMP\jasp\JASP.ini" -Pattern '^rpcServerEnabled' -Quiet) { exit 1 }
           if (Test-Path "$env:USERPROFILE\Full Fat") { Write-Host "uninstall left the folder"; exit 1 }
-          if (Test-Path "$desk\Full Fat.cmd") { Write-Host "uninstall left the icon"; exit 1 }
+          if ((Test-Path "$desk\Full Fat.lnk") -or (Test-Path $lnk.TargetPath) -or (Test-Path "$desk\Full Fat.cmd")) { Write-Host "uninstall left the icon"; exit 1 }
           if (Select-String -Path "$env:USERPROFILE\.codex\config.toml" -SimpleMatch "Full Fat']" -Quiet) { exit 1 }
 
   # Intel Macs: the connector's packages must install there (a compiled package without an Intel wheel once
@@ -267,7 +275,7 @@ jobs:
         shell: pwsh
         run: |
           $desk = [Environment]::GetFolderPath("Desktop")
-          python tests/e2e_check_launcher.py "$desk\Full Fat.cmd" "$env:USERPROFILE\Full Fat" --double-click
+          python tests/e2e_check_launcher.py "$desk\Full Fat.lnk" "$env:USERPROFILE\Full Fat" --double-click
           if ($LASTEXITCODE -ne 0) { exit 1 }
       - name: full-fat doctor
         shell: pwsh

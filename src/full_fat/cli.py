@@ -269,7 +269,8 @@ def cmd_setup(a, ui: UI) -> int:
             except OSError as e:
                 ui.problem(f"Full Fat could not make the Full Fat icon ({e}).")
         for x in launchers:
-            ui.ok(f'"{launcher.NAME}" icon: {keep(x)}')
+            if not launcher.is_icon_file(x) and Path(x).parent != state.config_dir():
+                ui.ok(f'"{launcher.NAME}" icon: {keep(x)}')
 
     old_launchers = [x for x in st.get("launchers", []) if x not in launchers]
     if launchers:  # new icons were written, so they replace the ones recorded earlier

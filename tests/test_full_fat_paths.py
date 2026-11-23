@@ -119,6 +119,8 @@ def test_launcher_really_passes_the_spaced_folder(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
     folder = tmp_path / "Full Fat"
     made = launcher.create(folder, desktop=here)[0]
+    if made.suffix == ".lnk":  # Windows: the shortcut opens the script in Full Fat's own folder
+        made = launcher.create(folder, desktop=here)[1]
     if made.suffix == ".desktop":
         cmd = shlex.split(next(x[5:] for x in made.read_text().splitlines() if x.startswith("Exec=")))
         assert f"\nPath={folder}\n" in made.read_text()

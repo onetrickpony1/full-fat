@@ -44,6 +44,9 @@ They are downloaded to your computer when you run setup, together with a note of
 jasp-mcp, the connector the chat apps start, is downloaded from
 [jasp-stats/jasp-mcp](https://github.com/jasp-stats/jasp-mcp) under its own licence (MIT).
 
+The "Full Fat" icon's "FF" letters are outlines from the Inter typeface by The Inter Project Authors, under the
+SIL Open Font License 1.1 (`assets/icon/OFL-Inter.txt`, also installed with the icons).
+
 ## 4. Your subscriptions and accounts
 
 You use your own Claude or ChatGPT subscription, under Anthropic's or OpenAI's terms. You are responsible for

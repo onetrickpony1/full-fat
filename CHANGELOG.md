@@ -39,6 +39,9 @@
   Now, if the ChatGPT app is installed, setup suggests it, and the icon opens JASP and then a new chat on the
   app's Codex side in the chat folder, with the first message typed in. If the app is missing or doesn't open,
   the chat starts in the Terminal as before. `--open-in terminal` keeps the Terminal.
+- **The "Full Fat" icon is a milk carton.** Before, it showed Terminal's or Command Prompt's icon. Now Linux
+  shows the carton on the Desktop and in the applications menu, Windows gets a "Full Fat" shortcut with the
+  carton, and on a Mac Full Fat sets it as the Finder icon. Uninstall removes the icon files too.
 
 ### Fixes
 - **Codex chats in the ChatGPT app start at high effort and without the app's extra tools.** Before, a chat

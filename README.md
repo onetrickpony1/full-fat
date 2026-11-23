@@ -1,4 +1,4 @@
-# Full Fat
+# Full Fat <img src="src/full_fat/icons/full-fat-128.png" alt="" width="64" align="right">
 
 Full Fat lets you talk to Claude or ChatGPT about your JASP analyses, using a subscription you already pay
 for (Claude Pro or Max through Claude Code, or ChatGPT Plus or Pro through Codex). The chat inside JASP needs a
@@ -57,8 +57,8 @@ Start a chat now? [Y/n]
 - **JASP's own instructions.** The system prompt, the annotation prompt and the personas (Alfred, Socrates,
   Evelyn) come from JASP's source for the version you have installed, so the chat behaves like JASP's own
   assistant. `/annotate` in Claude Code writes an annotation into the JASP output.
-- **"Full Fat" icon.** It opens JASP connected (or reconnects to it), then starts the chat with a short
-  greeting that says what you can ask.
+- **"Full Fat" icon**, a milk carton, on the Desktop (and in the applications menu on Linux). It opens JASP
+  connected (or reconnects to it), then starts the chat with a short greeting that says what you can ask.
 - **Top model at high effort from the start**: Claude Opus in Claude Code, GPT-6.2 Astra in Codex. A model
   you pick with `/model` and save as your default is kept for the next chats.
 - **ChatGPT in the ChatGPT app.** If the app is installed, ChatGPT chats open on its Codex side instead of in
@@ -235,6 +235,12 @@ window it ran in.
     be off again on disk while JASP still answers, and a second JASP start without Full Fat must have no
     connection. The chat app is a stand-in;
   - on an Intel Mac, the connector starts (its packages install there).
+- **The icon.** On Linux the carton goes into `~/.local/share/icons/hicolor/<size>/apps/full-fat.png`. On
+  Windows the Desktop gets a shortcut, "Full Fat", with the carton; it opens `Full Fat.cmd` in Full Fat's own
+  folder (`%APPDATA%\full-fat`). If the shortcut can't be made, `Full Fat.cmd` goes on the Desktop instead.
+  On macOS Full Fat sets the carton as the Finder icon of `Full Fat.command`; if that fails, the file keeps
+  Terminal's icon. Uninstall removes all of these. The "FF" letters are outlines from the Inter typeface (SIL
+  Open Font License 1.1, see `assets/icon/OFL-Inter.txt`).
 - **Not affiliated with JASP.** Full Fat is not made or endorsed by the JASP team. JASP's prompts are
   downloaded from [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop) (AGPL-3.0) when you
   run setup. The connector is the official [jasp-mcp](https://github.com/jasp-stats/jasp-mcp), pinned to a

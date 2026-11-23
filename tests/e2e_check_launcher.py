@@ -72,6 +72,13 @@ def check(marker: Path, folder: Path, how: str, wait: float = 5) -> None:
     marker.unlink()
 
 
+def shortcut_target(lnk: Path) -> str:
+    ps = "(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK).TargetPath"
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=dict(os.environ, LNK=str(lnk.absolute())),
+                       capture_output=True, text=True, timeout=60, check=True)
+    return r.stdout.strip()
+
+
 def diagnose(planted: Path | None) -> None:
     """Print what the double-clicked window did, for the CI log."""
     print("--- diagnostics", flush=True)
@@ -109,6 +116,9 @@ def main() -> int:
     if linux:
         entry = a.launcher.read_text()
         cmd = shlex.split(next(x[5:] for x in entry.splitlines() if x.startswith("Exec=")))
+    elif a.launcher.suffix.lower() == ".lnk":  # Windows shortcut: run what it points at
+        cmd = [shortcut_target(a.launcher)]
+        print(f"shortcut points at [{cmd[0]}]", flush=True)
     else:
         cmd = [str(a.launcher.absolute())]
     subprocess.run(cmd, cwd=tmp, env=env, stdin=subprocess.DEVNULL, timeout=120, check=True)
