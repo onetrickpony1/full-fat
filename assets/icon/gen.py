@@ -1,4 +1,4 @@
-"""Full Fat icon v8 generator: main 128 master.
+"""Full Fat icon v9 generator: main 128 master.
 Run: python3 -I gen.py (from this folder). Writes ff-icon.svg.
 
 Model: a square-based gable-top carton in true orthographic three-quarter view
@@ -25,7 +25,7 @@ R2 = (-sT * sP, cP, cT * sP)               # screen up
 R3 = (sT * cP, sP, -cT * cP)               # toward camera
 
 # ---------- carton (world units) ----------
-W = D = 32.5           # square base; screen front ~28.5, side ~15.7
+W = D = 29.6           # square base (-9% vs v8); screen front ~25.9, side ~14.3
 H = 68.5               # body height
 RISE = 8.0            # gable rise to ridge
 FINH = 7.0             # fin height
@@ -102,8 +102,8 @@ fin_end = poly(P(W, H + RISE - 0.6, ZF), P(W, H + RISE, D / 2 + FIN_T),
 import sys
 SMALL = "--64" in sys.argv          # 64 px master: ~5 rows, dots ~10% larger
 PITCH = W / 2.5        # 13: 2.5 pitches per panel -> half dots on every vertical edge
-ROWQ = 13.4 if SMALL else 11.2      # row spacing
-DOT_R = 3.95 if SMALL else 3.6
+ROWQ = 13.4 if SMALL else 10.4      # row spacing
+DOT_R = 3.7 if SMALL else 3.3
 V0 = 7.0 if SMALL else 5.6
 
 def lattice(umin, umax, vmin, vmax):
@@ -125,7 +125,7 @@ def dots_svg(pts, fill):
     return "".join(f'<circle cx="{f(u)}" cy="{f(v)}" r="{DOT_R}"/>' for u, v in pts)
 
 # label on the front plane (unrolled coords)
-LAB_U, LAB_V, LAB_RW = W / 2, 31.0, (13.2 if SMALL else 12.4)    # world radius -> screen ~10.9 horizontal
+LAB_U, LAB_V, LAB_RW = W / 2, 31.0, (12.2 if SMALL else 11.3)    # world radius -> screen ~9.9 horizontal
 
 # ---------- FF lettering: Inter Black "F", outline converted with fontTools ----------
 # Inter Black (OFL), unitsPerEm 2048, cap height 1490, advance 1196, no F-F kern pair.
@@ -147,8 +147,8 @@ def FF_svg(m, cu, cv, cap_h):
     return f'<path transform="{mat(m)}" d="{" ".join(out)}" fill="{RED}"/>'
 
 # ---------- cap ----------
-CAP_U, CAP_S = W * 0.58, L * 0.45      # position on the front roof panel
-CAP_R, CAP_H = 5.0, 3.5
+CAP_U, CAP_S = W * 0.50, L * 0.45      # centred across the front roof panel
+CAP_R, CAP_H = 4.6, 3.3
 ROOF_N = norm((0.0, D / 2, -RISE))
 
 def ring(C, e1, e2, r, n=96):
@@ -217,7 +217,8 @@ def main_svg():
             continue
         front_pts.append((u, v))
     side_pts = lattice(W, 2 * W, 0, H + RISE)
-    roof_pts = lattice(0, W, H, H + L)
+    roof_pts = [(u, v) for u, v in lattice(0, W, H, H + L)
+                if math.hypot(u - CAP_U, v - (H + CAP_S)) > CAP_R + DOT_R + 1.6]   # keep the cap clear
     lab_c = P(*front3(LAB_U, LAB_V))
     capgrad, cap = cap_svg()
     seam_y = H + RISE + FINH * 0.30
@@ -246,7 +247,7 @@ def main_svg():
 <path d="{tile}" fill="#0a1222" opacity=".18" transform="translate(0 .5)" filter="url(#tsh2)"/>
 <path d="{tile}" fill="url(#tile)"/>
 <path d="{tile}" fill="none" stroke="#d3d7e0" stroke-width=".5" transform="translate(64 63) scale(.9951) translate(-64 -63)"/>
-<ellipse cx="{f(foot[0] + 1.5)}" cy="{f(F1[1] - 2.0)}" rx="21" ry="3.6" fill="#141a3a" opacity=".3" filter="url(#floor)"/>
+<ellipse cx="{f(foot[0] + 1.5)}" cy="{f(F1[1] - 2.0)}" rx="19" ry="3.4" fill="#141a3a" opacity=".3" filter="url(#floor)"/>
 <path d="{side}" fill="{IND_S}"/>
 <g clip-path="url(#sideclip)"><g transform="{mat(mS)}" fill="{SIDE_DOT}">{dots_svg(side_pts, SIDE_DOT)}</g><path d="{side}" fill="url(#sideshade)"/><path d="{side}" fill="url(#sidebulge)"/></g>
 <path d="{roof}" fill="{IND_R}"/>
