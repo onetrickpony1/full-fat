@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -486,7 +488,7 @@ def cmd_launch(a, ui: UI) -> int:
     cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder, remote.NAME if browser else None)
     os.chdir(folder)
     if os.name == "nt":
-        with subprocess.Popen(cmd) as p:
+        with chat_owns_ctrl_c(), subprocess.Popen(cmd) as p:
             if browser:
                 remote.start_thread(p, folder, j.plot_dirs)
             return p.wait()
@@ -495,6 +497,28 @@ def cmd_launch(a, ui: UI) -> int:
         remote.start_detached(os.getpid(), folder, j.plot_dirs)
     os.execv(exe, cmd)
     return 0  # not reached
+
+
+def _ignore_ctrl_c(signum, frame) -> None:
+    """Ctrl+C while the chat app runs is the chat app's."""
+
+
+@contextlib.contextmanager
+def chat_owns_ctrl_c():
+    """While Full Fat waits for the chat app in the same window, Ctrl+C reaches both. The chat app handles it
+    (Claude Code and Codex use it to stop a reply or to quit); Full Fat must not stop then, or it would return
+    while the chat still runs (Full Fat.cmd would pause over the chat on Windows). So Full Fat does nothing on
+    Ctrl+C until the chat app ends, and returns its exit code. A handler, not SIG_IGN: an ignored signal stays
+    ignored in a program started from here, a handler goes back to the default."""
+    try:
+        old = signal.signal(signal.SIGINT, _ignore_ctrl_c)
+    except ValueError:  # not the main thread
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, old)
 
 
 def in_browser(exe: str, ui: UI) -> bool:

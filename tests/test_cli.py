@@ -559,3 +559,25 @@ def test_real_terminal_input_replaces_dev_tty(tmp_path):
     out = data.decode(errors="replace").split()
     assert p.returncode == 0, err
     assert out[0] == "/dev/tty" and out[1] == out[2] != "/dev/tty"
+
+
+# ---------------------------------------------------------------------------- Ctrl+C while the chat app runs
+
+def test_ctrl_c_while_the_chat_runs_is_the_chat_apps():
+    import signal  # noqa: PLC0415
+    before = signal.getsignal(signal.SIGINT)
+    with cli.chat_owns_ctrl_c():
+        signal.raise_signal(signal.SIGINT)  # Full Fat carries on waiting
+    assert signal.getsignal(signal.SIGINT) is before
+    with pytest.raises(KeyboardInterrupt):
+        signal.raise_signal(signal.SIGINT)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX signal inheritance")
+def test_the_chat_app_still_gets_ctrl_c():
+    """The chat app starts with the usual Ctrl+C, not an ignored one."""
+    import subprocess  # noqa: PLC0415
+    with cli.chat_owns_ctrl_c():
+        out = subprocess.run([sys.executable, "-c", "import signal; print(signal.getsignal(signal.SIGINT))"],
+                             capture_output=True, text=True).stdout
+    assert "default_int_handler" in out

@@ -57,3 +57,6 @@
   in the app ran at the effort saved in your own Codex settings (often medium) and could use the app's tools
   for running code, reading any file, the computer, the browser and connected apps. Now the chat folder's
   settings start every Codex chat at high effort and switch those tools off.
+- **Ctrl+C in a chat on Windows stops only what the chat is doing.** Before, Ctrl+C also stopped Full Fat
+  while the chat kept running in the same window, and Full Fat's "Press any key" message appeared over the
+  chat. Now Full Fat leaves Ctrl+C to the chat app and waits until the chat ends.
