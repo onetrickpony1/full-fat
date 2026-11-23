@@ -226,3 +226,25 @@ def test_jasp_assistant_tools_match_capabilities():
             "analysis_createAnnotation", "analyses_list", "get_analyses_state", "analysis_results",
             "analysis_context", "data_info"]
     assert set(workspace.JASP_ASSISTANT_TOOLS) == {"jasp_" + c for c in caps}
+
+
+def test_guidance_names_real_tools_that_run_without_asking():
+    # The assistant is told to read option descriptions and check options it got back: those tools must exist
+    # and run without asking, or the advice costs the user an approval every time.
+    import re
+    env = workspace.template("environment.md")
+    named = set(re.findall(r"`(jasp_[A-Za-z_]+)`", env))
+    assert {"jasp_analysis_create", "jasp_get_analyses_state", "jasp_analysis_run"} <= named
+    assert named <= set(workspace.ALL_TOOLS)
+    assert {"jasp_analysis_create", "jasp_get_analyses_state", "jasp_analysis_run"} <= set(workspace.DEFAULT_TOOLS)
+    # get_analyses_state's parameter in JASP's Resources/JASP_RPC.json (v0.99.0)
+    assert "`include_descriptions`" in env
+
+
+def test_guidance_on_tools_that_vanish_mid_chat():
+    # jasp-mcp drops every tool for about 2 s when its ping meets JASP busy with another call; the restart
+    # advice is only for a chat that starts without tools.
+    env = workspace.template("environment.md")
+    assert "available at the start of the chat" in env
+    assert "disappear in the middle of a chat" in env and "come back on their own" in env
+    assert "compare the options it returns with what you sent" in env

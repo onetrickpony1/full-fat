@@ -299,6 +299,13 @@ window it ran in.
   On macOS Full Fat sets the carton as the Finder icon of `Full Fat.command`; if that fails, the file keeps
   Terminal's icon. Uninstall removes all of these. The "FF" letters are outlines from the Inter typeface (SIL
   Open Font License 1.1, see `assets/icon/OFL-Inter.txt`).
+- **Two quirks of JASP and its connector** (seen with JASP 0.99.0 and jasp-mcp 72d9d7be). The JASP tools can
+  vanish from the chat for a few seconds just after an analysis runs: jasp-mcp checks JASP every 2 seconds,
+  JASP turns that check away while another call is still running, and jasp-mcp then drops all its tools until
+  the next check works. And boxes inside a model (for example Independent X and Moderator W in a Process
+  model) are emptied without an error when they are set in the same call as the main variable boxes they pick
+  from. The chat folder's instructions tell the assistant to expect both: wait for the tools to come back, set
+  the main boxes first, and check the options JASP sends back after every run.
 - **Not affiliated with JASP.** Full Fat is not made or endorsed by the JASP team. JASP's prompts are
   downloaded from [jasp-stats/jasp-desktop](https://github.com/jasp-stats/jasp-desktop) (AGPL-3.0) when you
   run setup. The connector is the official [jasp-mcp](https://github.com/jasp-stats/jasp-mcp), pinned to a

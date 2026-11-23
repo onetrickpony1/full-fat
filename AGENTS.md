@@ -56,6 +56,18 @@ Pinned to `72d9d7be9c003b9681b40871ee5850795108e5ab` (`workspace.JASP_MCP_SHA`) 
 - **Compiled packages come only as wheels** (`workspace.WHEEL_ONLY`, `--no-build-package` for each): cryptography
   50.0.2 has no Intel Mac wheel, and building it needs Rust. uvx has no `--only-binary`, and `--no-build` would
   also refuse to build jasp-mcp's own source archive. CI's `connector-intel-mac` job checks it.
+- **Tools vanish for about 2 s after a long call** (reproduced 2026-11-23, JASP 0.99.0 Flatpak, jaspProcess
+  0.95.5). `server._poll_jasp` pings every 2 s and clears all tools on one failed ping. JASP's dispatcher
+  (`Desktop/rpc/jasprpcdispatcher.cpp` v0.99.0 line 552) answers every call that arrives while `analysis_run`,
+  `analysis_results`, `data_load` or `data_load_status` wait in a nested event loop with -32000 "Procedure call
+  already in flight", so a ping during a 1.6 s run cleared the tools. Not a stall: pings took at most 0.11 s.
+  Full Fat does not wrap or patch jasp-mcp for this; `templates/environment.md` tells the assistant to wait.
+  Drafted upstream reports are not filed yet.
+- **Inner variable boxes are dropped silently** when set in the same `analysis_run` as the main boxes they take
+  their variables from (Process `processModels[].modelNumberIndependent`/`modelNumberModeratorW` with
+  `covariates`/`factors`); a second run keeps them. JASP's option descriptions (`optionMeta`) leave out TabView
+  options such as `processModels` (`QMLComponents/analysisform.cpp` `_controlOptionMeta` has no TabView case).
+  `environment.md` covers both.
 - Before moving the pin, run `tests/e2e_check_jasp.py` against a running JASP. The uvx path is written as an
   absolute path when found, so the apps work even before the shell's PATH is updated.
 

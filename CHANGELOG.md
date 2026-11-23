@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- **The assistant no longer gives up when the JASP tools vanish for a moment.** Just after an analysis runs,
+  the JASP tools can disappear from the chat for a few seconds while JASP is busy. Before, the instructions
+  told the assistant that missing tools meant JASP had to be restarted. Now it waits for them to come back,
+  and the restart advice is only for a chat that starts without them.
+- **Analyses with variable boxes inside a model now get set up properly.** In a Process model, JASP empties
+  boxes such as Independent X and Moderator W without an error when they are filled in the same step as the
+  main variable boxes, and the model runs as "incomplete". The assistant now fills the main boxes first, starts
+  from the analysis's own option descriptions, and checks the options JASP sends back after every run before
+  it reports results.
+
 ## 0.1.0 - 2026-11-23
 
 ### Features
