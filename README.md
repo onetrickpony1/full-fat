@@ -73,8 +73,9 @@ Start a chat now? [Y/n]
   show as tables and approval questions are buttons. The Terminal window keeps the chat running. If your
   Claude Code or your sign-in can't do that, the chat stays in the Terminal.
 - **Plots in the browser.** When the chat shows you a plot, click its link to see it.
-- **ChatGPT in the ChatGPT app.** If the app is installed, ChatGPT chats open on its Codex side instead of in
-  a Terminal window, with the same JASP tools and the same rules. The Terminal stays as the fallback.
+- **ChatGPT in the ChatGPT app.** If Full Fat finds the ChatGPT app, ChatGPT chats open on its Codex side,
+  with the same JASP tools and the same rules, instead of in a Terminal window. If the app isn't found or
+  doesn't open, the chat opens in the Terminal. Tried with the app for Linux only.
 - **Analyses without asking, the rest asks first.** Creating and running analyses and reading results run
   without asking, as in JASP's own assistant. Writing a report or an annotation, recombining results and
   loading a data file ask first. `--careful` makes it ask before every change to JASP.
@@ -109,6 +110,9 @@ internet or that it "protected your PC": click More info, then Run anyway.
    curl -LsSf https://raw.githubusercontent.com/onetrickpony1/full-fat/main/install.sh | sh
    ```
 3. Answer the questions. When your Mac asks whether Terminal may use your Desktop folder, click Allow.
+
+macOS is less tested than Linux: CI runs Full Fat with the real JASP on a Mac, but nobody has used it on a
+real Mac yet.
 
 ### Linux
 
@@ -156,9 +160,12 @@ Enterprise plan, an admin may have to allow it. To keep Claude chats in the Term
 
 ### ChatGPT in the ChatGPT app
 
-If you pay for ChatGPT and the ChatGPT app is installed on your computer, setup asks where you want to chat
+If you pay for ChatGPT and Full Fat finds the ChatGPT app on your computer, setup asks where you want to chat
 and suggests the app. Then the "Full Fat" icon opens JASP and, once JASP is connected, opens the ChatGPT app
-with a new chat on its Codex side, in the chat folder.
+with a new chat on its Codex side (the part of the app that works in a folder on your computer), in the chat
+folder. This was tried with the app for Linux. On a Mac or a Windows PC, Full Fat looks for the app where
+those systems register it, but nobody has tried that yet: if the app isn't found, the chat opens in the
+Terminal.
 
 - The first time, the app may ask you to sign in. Sign in with your ChatGPT account.
 - The first message is already typed in for you. Press Enter to send it, and the chat says hello.
@@ -274,8 +281,7 @@ window it ran in.
   again. Claude Code has no supported way to do that, so it asks once. Its question starts on "No, exit":
   press the Down arrow, then Enter.
 - **Tested on** Linux (JASP 0.98.1 Flatpak) with Claude Code and Codex, and with the ChatGPT app 26.1111 for
-  Linux. Nobody has tried Full Fat on a real
-  Windows PC or Mac yet. What CI checks, on every push:
+  Linux. Nobody has tried Full Fat on a real Windows PC or Mac yet. What CI checks, on every push:
   - unit tests on Linux, macOS and Windows (Python 3.11 and the newest);
   - the install lines (`install.sh`, `install.ps1`, from the checked-out code, not the published link), with
     git hidden as on a new computer, a stand-in JASP settings file, stand-in chat apps and `--yes`; then the
