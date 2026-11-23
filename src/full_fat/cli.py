@@ -180,6 +180,21 @@ def warm_connector(folder: Path, ui: UI) -> bool:
     return ok
 
 
+def codex_update_line() -> str:
+    return apps.CODEX.install_windows if os.name == "nt" else apps.CODEX.install_posix
+
+
+def codex_reads_folder(exe: str, folder: Path, ui: UI) -> bool:
+    """Setup's check that this Codex can read the chat folder's settings (an older one refuses them)."""
+    if apps.codex_folder_problem(exe, folder) is None:
+        return True
+    ui.problem("Codex could not read the chat folder's settings. This Codex is probably older than Full Fat "
+               "needs.")
+    ui.say(f"  Update Codex with this line in a Terminal window: {keep(codex_update_line())}")
+    ui.say("  Then run Full Fat setup again.")
+    return False
+
+
 def remove_launcher(recorded: str, ui: UI) -> bool:
     """Remove an icon that Full Fat's state records. False means it is still there to remove another time."""
     try:
@@ -262,6 +277,9 @@ def cmd_setup(a, ui: UI) -> int:
             ui.ok("Codex already trusts the chat folder.")
         else:
             ui.say("  When Codex asks whether you trust this folder, choose yes.")
+
+    if exes.get("codex") not in (None, "app") and not codex_reads_folder(exes["codex"], folder, ui):
+        connector_ok = False
 
     launchers: list[str] = []
     icon_place = "on your Desktop"
@@ -659,6 +677,10 @@ def cmd_doctor(a, ui: UI) -> int:
             ui.ok(f"Signed in to {app.product}.")
         else:
             bad(f"Not signed in to {app.product}.", "run full-fat setup again, or double-click Full Fat")
+        if k == "codex" and folder.is_dir():
+            if apps.codex_folder_problem(exe, folder) is not None:
+                bad("Codex could not read the chat folder's settings (this Codex is probably too old).",
+                    f"update Codex with {keep(codex_update_line())} , then run full-fat setup again")
     missing = workspace.missing_files(folder)
     if missing:
         bad(f"The chat folder {keep(folder)} is missing {', '.join(missing)}.", "run full-fat setup again")

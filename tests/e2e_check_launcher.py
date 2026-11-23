@@ -43,11 +43,11 @@ class FakeJasp(http.server.BaseHTTPRequestHandler):
 def fake_app(folder: Path, marker: Path) -> Path:
     if os.name == "nt":
         p = folder / "fake chat.cmd"
-        p.write_text('@echo off\nif "%~1"=="auth" exit /b 0\nif "%~1"=="login" exit /b 0\n'
+        p.write_text('@echo off\nif "%~1"=="auth" exit /b 0\nif "%~1"=="login" exit /b 0\nif "%~1"=="mcp" exit /b 0\n'
                      f'>"{marker}.tmp" echo %CD%\n>>"{marker}.tmp" echo %*\nmove /y "{marker}.tmp" "{marker}" >nul\nexit /b 0\n')
     else:
         p = folder / "fake chat"
-        p.write_text('#!/bin/sh\ncase "$1" in auth|login) exit 0;; esac\n'
+        p.write_text('#!/bin/sh\ncase "$1" in auth|login|mcp) exit 0;; esac\n'
                      f'{{ pwd; printf "%s\\n" "$@"; }} > {shlex.quote(str(marker) + ".tmp")}\n'
                      f'mv {shlex.quote(str(marker) + ".tmp")} {shlex.quote(str(marker))}\n')
         p.chmod(0o755)

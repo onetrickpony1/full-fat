@@ -1,6 +1,9 @@
+import os
 import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 from full_fat import apps
 
@@ -265,3 +268,38 @@ def test_open_desktop_app_windows(monkeypatch):
         raise OSError("No application is associated")
     monkeypatch.setattr(apps.os, "startfile", no_app, raising=False)
     assert not apps.open_desktop_app("codex://x", "win32")
+
+
+# ---------------------------------------------------------------------------- an older Codex and the folder's settings
+
+def stand_in_codex(tmp_path, code: int, message: str):
+    """A Codex that answers `codex mcp list` with code and message, and records the folder it ran in."""
+    if os.name == "nt":
+        pytest.skip("a POSIX shell stand-in")
+    p = tmp_path / "codex-stand-in"
+    p.write_text("#!/bin/sh\n"
+                 f'case "$1" in login) exit 0;; mcp) pwd > "{tmp_path}/ran-in"; echo "{message}" >&2; exit {code};; '
+                 "esac\n")
+    p.chmod(0o755)
+    return str(p)
+
+
+def test_codex_that_loads_the_folder_passes(tmp_path):
+    folder = tmp_path / "Full Fat"
+    folder.mkdir()
+    assert apps.codex_folder_problem(stand_in_codex(tmp_path, 0, "No MCP servers configured"), folder) is None
+    assert (tmp_path / "ran-in").read_text().strip() == str(folder)
+
+
+def test_codex_that_refuses_the_folders_settings_is_a_problem(tmp_path):
+    exe = stand_in_codex(tmp_path, 1, "Error loading config.toml: unknown field `apps` in features")
+    assert "unknown field" in apps.codex_folder_problem(exe, tmp_path)
+
+
+@pytest.mark.parametrize("code,message", [(1, "network down"), (2, "")])
+def test_other_codex_errors_are_not_blamed_on_the_settings(tmp_path, code, message):
+    assert apps.codex_folder_problem(stand_in_codex(tmp_path, code, message), tmp_path) is None
+
+
+def test_no_codex_is_no_problem(tmp_path):
+    assert apps.codex_folder_problem(str(tmp_path / "missing"), tmp_path) is None

@@ -132,6 +132,10 @@ What CI proves, and only this:
   `workspace.DESKTOP_PLUGINS_OFF`. Checked with Codex 0.169 (bundled with chatgpt-bin 26.1111): `codex mcp list`
   and app-server `config/read` load the file with an empty CODEX_HOME and with the app's own config, and a chat
   opened in the app had none of those tools and ran at high effort.
+  An older Codex CLI may refuse those keys, so setup and `doctor` run `codex mcp list` in the folder
+  (`apps.codex_folder_problem`, 30 s): a non-zero exit whose text mentions the settings file is a problem, and
+  the message gives Codex's install line as the update. No Codex CLI (app route), a timeout or another error
+  passes. The CI stand-ins answer `mcp` with 0.
 - `jasp/`: the downloaded prompts and `source.txt`. `.full-fat.json`: the manifest.
 - `plots/` (only while or after a browser chat): copies of JASP's plot PNGs, made by `plots.Copier` in the
   Remote Control helper (`remote.watch`), at their path below JASP's temp folder (`.../temp/4/resources/1/x.png`

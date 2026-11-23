@@ -100,6 +100,27 @@ def sign_in(app: App, exe: str) -> bool:
     return bool(signed_in(app, exe))
 
 
+# Words in Codex's error when it can't load a settings file (an older Codex refuses keys it doesn't know)
+CODEX_CONFIG_ERROR = ("config", "toml", "parse", "invalid", "unknown field", "unknown variant", "transport")
+
+
+def codex_folder_problem(exe: str, folder: Path, timeout: float = 30) -> str | None:
+    """Does this Codex CLI load the chat folder's settings? The folder's .codex/config.toml uses keys that only
+    newer Codex versions know (features.apps, plugins, node_repl switched off; checked with Codex 0.169), and
+    Codex refuses the whole file when it can't read it. `codex mcp list` in the folder loads the settings
+    without starting anything. Returns Codex's error when it refused them, None when they load or when the
+    answer is unclear (no Codex, a timeout, another error)."""
+    try:
+        r = subprocess.run([exe, "mcp", "list"], cwd=folder, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL, errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode == 0:
+        return None
+    text = ((r.stderr or "") + "\n" + (r.stdout or "")).strip()
+    return text[-500:] if any(w in text.lower() for w in CODEX_CONFIG_ERROR) else None
+
+
 # ---------------------------------------------------------------------------- Codex folder trust
 
 def codex_home() -> Path:

@@ -62,3 +62,7 @@
 - **Ctrl+C in a chat on Windows stops only what the chat is doing.** Before, Ctrl+C also stopped Full Fat
   while the chat kept running in the same window, and Full Fat's "Press any key" message appeared over the
   chat. Now Full Fat leaves Ctrl+C to the chat app and waits until the chat ends.
+- **Setup and `full-fat doctor` notice a Codex too old for the chat folder.** Before, an older Codex could
+  refuse the chat folder's settings and the ChatGPT chat failed to start with a message about its settings
+  file. Now setup and doctor check that Codex can read them and, if not, tell you to update Codex and give the
+  line to do it.

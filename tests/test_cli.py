@@ -581,3 +581,27 @@ def test_the_chat_app_still_gets_ctrl_c():
         out = subprocess.run([sys.executable, "-c", "import signal; print(signal.getsignal(signal.SIGINT))"],
                              capture_output=True, text=True).stdout
     assert "default_int_handler" in out
+
+
+# ---------------------------------------------------------------------------- an older Codex
+
+@pytest.mark.skipif(os.name == "nt", reason="a POSIX shell stand-in")
+def test_setup_and_doctor_say_to_update_a_codex_that_cant_read_the_folder(env, monkeypatch, capsys):
+    tmp_path, conf = env
+    fake = tmp_path / "bin" / "codex"
+    fake.write_text('#!/bin/sh\ncase "$1" in login) exit 0;; mcp) echo "Error: invalid transport in config.toml" >&2; '
+                    "exit 1;; esac\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("FULL_FAT_CODEX", str(fake))
+    assert cli.main(app_setup_args(tmp_path, conf)) == 1  # not done: ChatGPT chats would fail
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Codex could not read the chat folder's settings" in out and apps.CODEX.install_posix in out
+    assert "Almost done" in out and "config" not in out.lower().replace("configur", "")
+    monkeypatch.setattr(jasp, "ping", lambda h, p: False)
+    monkeypatch.setattr(jasp, "running", lambda: False)
+    monkeypatch.setattr(cli.connector, "warm", lambda server, folder: (True, ""))
+    assert cli.main(["doctor"]) == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Codex could not read the chat folder's settings" in out and apps.CODEX.install_posix in out
+    fake.write_text('#!/bin/sh\nexit 0\n')  # Codex updated
+    assert cli.main(["doctor"]) == 0

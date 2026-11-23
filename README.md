@@ -233,7 +233,9 @@ window it ran in.
   file (`node_repl`), using the computer, the browser, Chrome, and connected apps. The folder's settings switch
   them off (`[mcp_servers.node_repl] enabled = false`, `[plugins."..."] enabled = false`,
   `features.apps = false`). In the app, "Approve for me" uses the app's automatic reviewer, which can answer
-  approval questions instead of you even with `approvals_reviewer = "user"`.
+  approval questions instead of you even with `approvals_reviewer = "user"`. These keys were checked with
+  Codex 0.169. An older Codex may refuse the file, so setup and `full-fat doctor` run `codex mcp list` in the
+  chat folder and, if Codex can't read it, tell you to update Codex.
 - **The ChatGPT app.** Full Fat looks for it as an app that opens `codex://` links: on macOS ChatGPT.app or
   Codex.app in Applications (or whichever app macOS has for those links), on Windows the `codex` link entry in
   the registry, on Linux `xdg-mime query default x-scheme-handler/codex`. It opens
