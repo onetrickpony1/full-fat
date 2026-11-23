@@ -17,7 +17,9 @@ Full Fat is a setup tool that runs on your own computer. It:
 - adds a trust entry for that folder to Codex's settings (`~/.codex/config.toml`) when you set up Codex;
 - can run the official installers of Claude Code (Anthropic) and Codex CLI (OpenAI) when you answer yes (or
   when you run it with `--install-apps`), and their sign-in commands when you agree to it;
-- starts Claude Code or Codex in that folder when you double-click the icon, and opens JASP for it.
+- starts Claude Code or Codex in that folder when you double-click the icon, and opens JASP for it. A Claude
+  chat is started with Claude Code's Remote Control, so it is also shown on claude.ai/code in your browser,
+  under your Claude account. Full Fat opens that page.
 
 Everything that is downloaded, and from where:
 
@@ -51,7 +53,8 @@ SIL Open Font License 1.1 (`assets/icon/OFL-Inter.txt`, also installed with the 
 
 You use your own Claude or ChatGPT subscription, under Anthropic's or OpenAI's terms. You are responsible for
 following those terms. **Full Fat never handles your logins, passwords or tokens**: you sign in through the
-providers' own apps, in their own browser pages, and Full Fat only asks those apps whether you are signed in.
+providers' own apps, in their own browser pages, and Full Fat only asks those apps whether you are signed in
+(and Claude Code whether that is a Claude account).
 
 ## 5. Your data
 

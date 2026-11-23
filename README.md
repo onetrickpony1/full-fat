@@ -43,6 +43,14 @@ The first time you start a chat:
   - Before the chat loads a data file, or writes a report or an annotation into JASP, it asks you. To let
   it, choose the first option ("Yes" in Claude, "Allow" in ChatGPT) and press Enter.
   - If your Mac offers to install "command line developer tools", click Cancel. The chat doesn't need them.
+Claude chats also open in your web browser:
+  - Once Claude is ready, the chat also opens in your web browser, at https://claude.ai/code (it is
+  called "Full Fat" there). You can type there or in the Terminal window.
+  - If the browser asks you to sign in, sign in to claude.ai with your Claude account (the one you pay
+  for). The first time it may ask you to sign in again to check this computer, and may offer
+  notifications: those are up to you.
+  - Keep the Terminal window open while you chat: closing it ends the chat.
+  - To finish, type /exit in the Terminal window and press Enter, then close it.
 Start a chat now? [Y/n]
 ```
 
@@ -61,6 +69,9 @@ Start a chat now? [Y/n]
   connected (or reconnects to it), then starts the chat with a short greeting that says what you can ask.
 - **Top model at high effort from the start**: Claude Opus in Claude Code, GPT-6.2 Astra in Codex. A model
   you pick with `/model` and save as your default is kept for the next chats.
+- **Claude in your browser too.** A Claude chat also opens at claude.ai/code, as "Full Fat", where tables
+  show as tables and approval questions are buttons. The Terminal window keeps the chat running. If your
+  Claude Code or your sign-in can't do that, the chat stays in the Terminal.
 - **ChatGPT in the ChatGPT app.** If the app is installed, ChatGPT chats open on its Codex side instead of in
   a Terminal window, with the same JASP tools and the same rules. The Terminal stays as the fallback.
 - **Analyses without asking, the rest asks first.** Creating and running analyses and reading results run
@@ -123,6 +134,24 @@ Running the same line again updates Full Fat and runs the setup again.
 
 Close the window when you are done. Everything the chat creates is in JASP's results.
 
+### Claude in the browser
+
+With Claude, the chat also opens in your web browser, at claude.ai/code, where it is called "Full Fat". You
+can read and type there instead of in the Terminal window. The Terminal window shows the chat's own link too.
+
+- If the browser asks you to sign in, sign in to claude.ai with the Claude account you pay for. The first
+  time, it may ask you to sign in again to check this computer, and offer notifications (up to you).
+- Questions such as "Allow Claude to use jasp data load?" appear as buttons. Choose "Allow once".
+- Keep the Terminal window open: closing it ends the chat. To finish, type `/exit` in the Terminal window
+  and press Enter, then close it.
+- If the browser doesn't open by itself, go to https://claude.ai/code and click "Full Fat".
+
+This needs a Claude Pro or Max plan, with Claude Code signed in through your Claude account, and a recent
+Claude Code. If that isn't the case, Full Fat says so and the chat stays in the Terminal. On a Team or
+Enterprise plan, an admin may have to allow it. To keep Claude chats in the Terminal, run
+`full-fat setup --open-in terminal` (this also keeps ChatGPT chats in the Terminal), or for one chat
+`full-fat launch --open-in terminal`. `--open-in browser` turns it back on.
+
 ### ChatGPT in the ChatGPT app
 
 If you pay for ChatGPT and the ChatGPT app is installed on your computer, setup asks where you want to chat
@@ -144,6 +173,7 @@ the Terminal, you always answer them yourself. To chat in the Terminal for good,
 ```
 full-fat                  set up, or update (same as full-fat setup)
 full-fat launch           open JASP connected, then start the chat (the icon runs this)
+                          --open-in browser|terminal: Claude in the browser too, or only here
                           --open-in app|terminal: where a ChatGPT chat opens this time
 full-fat doctor           check everything and say how to fix problems
 full-fat uninstall        remove the icon and Full Fat's files, put JASP's setting back
@@ -159,7 +189,9 @@ Setup options:
 --jasp-version X.Y.Z      use these JASP instructions instead of the installed version's
 --yes                     ask nothing and never wait (for scripts); never installs the chat apps
 --install-apps            install Claude Code or Codex without asking, also with --yes
---open-in app|terminal    ChatGPT chats: in the ChatGPT app (the default when it is installed) or the Terminal
+--open-in browser         Claude chats: in the Terminal and the browser (the default)
+--open-in app             ChatGPT chats: in the ChatGPT app (the default when it is installed)
+--open-in terminal        Claude and ChatGPT chats: only in the Terminal
 --no-install-apps, --no-sign-in, --no-launcher, --no-trust, --no-start
 ```
 
@@ -206,6 +238,14 @@ window it ran in.
   `codex://threads/new?path=<chat folder>&mode=codex&prompt=<first message>` with `open`, `os.startfile` or
   `xdg-open`, after JASP is connected and its setting is off again. `FULL_FAT_CHATGPT_APP=none` makes Full Fat
   act as if the app is not installed.
+- **Claude in the browser** is Claude Code's Remote Control: the icon starts `claude --remote-control "Full
+  Fat"`. Full Fat first checks that `claude auth status` reports a Claude account sign-in (`authMethod`
+  "claude.ai", not an API key or a cloud provider, and no `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` or similar
+  set) and that `claude --help` lists `--remote-control`. Then it hands the Terminal to Claude Code and starts a
+  small helper that opens the browser at the chat's link once Claude Code has it, which it reads from Claude
+  Code's own session record. If that never appears, nothing opens and you find the chat at claude.ai/code. The
+  chat runs on your computer: closing the Terminal window ends it, and `/exit` archives it on claude.ai.
+  Tried on Linux with Claude Code 2.1.330 and a Max plan.
 - **Models.** The icon starts the chat on Opus (Claude Code) or GPT-6.2 Astra (Codex) at high effort, by
   passing them when it starts the app. It leaves them out when your own settings already choose a model or
   an effort: when you pick a model with `/model` in Claude Code, Claude saves it as your default, and the

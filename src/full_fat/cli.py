@@ -11,7 +11,7 @@ import time
 import urllib.error
 from pathlib import Path
 
-from . import __version__, apps, connector, jasp, launcher, link, prompts, state, workspace
+from . import __version__, apps, connector, jasp, launcher, link, prompts, remote, state, workspace
 from .ui import UI, keep, waiting
 
 GITHUB = "https://github.com/onetrickpony1/full-fat"
@@ -94,7 +94,7 @@ def chosen_apps(a, st: dict, ui: UI) -> list[str]:
 
 def chatgpt_place(a, st: dict, ui: UI) -> str:
     """Where a ChatGPT chat opens: "app" (the Codex side of the ChatGPT desktop app) or "terminal" (Codex)."""
-    if getattr(a, "open_in", None):
+    if getattr(a, "open_in", None) in ("app", "terminal"):
         return a.open_in
     if not apps.desktop_app_found():
         return "terminal"
@@ -104,6 +104,13 @@ def chatgpt_place(a, st: dict, ui: UI) -> str:
     n = ui.choose("The ChatGPT app is installed on this computer. Where do you want to chat with ChatGPT?",
                   ["In the ChatGPT app", "In a Terminal window like this one"], 1 if default == "app" else 2)
     return "app" if n == 1 else "terminal"
+
+
+def claude_place(a, st: dict) -> str:
+    """Where a Claude chat opens: "browser" (the Terminal and claude.ai/code, the default) or "terminal"."""
+    if getattr(a, "open_in", None) in ("browser", "terminal"):
+        return a.open_in
+    return "terminal" if st.get("claude_in") == "terminal" else "browser"
 
 
 def ensure_app(app: apps.App, ui: UI, may_install: bool, may_sign_in: bool, agreed: bool = False) -> str | None:
@@ -211,6 +218,7 @@ def cmd_setup(a, ui: UI) -> int:
     ui.heading("Chat app")
     keys = chosen_apps(a, st, ui)
     place = chatgpt_place(a, st, ui) if "codex" in keys else st.get("chatgpt_in")
+    claude_in = claude_place(a, st)
     exes = {}
     for k in keys:
         if k == "codex" and place == "app":  # the app brings its own Codex and its own sign-in
@@ -277,7 +285,7 @@ def cmd_setup(a, ui: UI) -> int:
         old_launchers = [x for x in old_launchers if not remove_launcher(x, ui)]
     state.save({"dir": str(folder), "apps": keys, "persona": persona, "careful": careful,
                 "launchers": launchers + old_launchers, "settings_file": a.settings_file,
-                "jasp_version": j.version, "chatgpt_in": place or "terminal"})
+                "jasp_version": j.version, "chatgpt_in": place or "terminal", "claude_in": claude_in})
 
     if not exes:
         ui.heading("Not finished")
@@ -293,7 +301,7 @@ def cmd_setup(a, ui: UI) -> int:
         ui.say(f"  (or, in this window: {keep(launcher.shell_command(launcher.full_fat_command() + ['launch']))})")
     ui.say("  Full Fat opens JASP for you. If JASP is already open, it may ask you to close it first, so save your "
            "work in JASP before you start.")
-    first_run_notes(list(exes), ui, app_route=place == "app")
+    first_run_notes(list(exes), ui, app_route=place == "app", browser=claude_in == "browser")
     if not connector_ok:
         return 1
     if not ui.yes and not a.no_start and ui.yes_no("Start a chat now?", True, on_eof=False):
@@ -302,7 +310,7 @@ def cmd_setup(a, ui: UI) -> int:
     return 0
 
 
-def first_run_notes(keys: list[str], ui: UI, app_route: bool = False) -> None:
+def first_run_notes(keys: list[str], ui: UI, app_route: bool = False, browser: bool = False) -> None:
     if "codex" in keys and app_route:
         ui.say("ChatGPT chats open in the ChatGPT app:")
         for line in APP_NOTES:
@@ -322,6 +330,10 @@ def first_run_notes(keys: list[str], ui: UI, app_route: bool = False) -> None:
     if sys.platform == "darwin":
         ui.say("  - If your Mac offers to install \"command line developer tools\", click Cancel. The chat "
                "doesn't need them.")
+    if "claude" in terminal and browser:
+        ui.say("Claude chats also open in your web browser:")
+        for line in BROWSER_NOTES:
+            ui.say("  - " + line)
 
 
 # ---------------------------------------------------------------------------- launch
@@ -334,6 +346,23 @@ APP_NOTES = [
     "To change the model or the effort, use the picker under the message box.",
     "Once the app is open, you can close the Terminal window. JASP stays open and connected.",
 ]
+
+
+BROWSER_NOTES = [
+    f'Once Claude is ready, the chat also opens in your web browser, at {remote.CODE_URL} (it is called '
+    f'"{remote.NAME}" there). You can type there or in the Terminal window.',
+    "If the browser asks you to sign in, sign in to claude.ai with your Claude account (the one you pay "
+    "for). The first time it may ask you to sign in again to check this computer, and may offer "
+    "notifications: those are up to you.",
+    "Keep the Terminal window open while you chat: closing it ends the chat.",
+    "To finish, type /exit in the Terminal window and press Enter, then close it.",
+]
+BROWSER_UNAVAILABLE = {
+    "account": "Your chat stays in this window: opening it in the browser needs Claude Code signed in with a "
+               "Claude Pro or Max account.",
+    "old": "Your chat stays in this window: this Claude Code is too old to open it in the browser. To get "
+           "that, update Claude Code (type claude update in a Terminal window).",
+}
 
 
 def _workspace_from(a, st: dict) -> Path:
@@ -427,7 +456,8 @@ def cmd_launch(a, ui: UI) -> int:
         n = ui.choose("Chat with which?", ["Claude", "ChatGPT"], 1)
         keys = [keys[n - 1]]
     app = apps.APPS[keys[0]]
-    in_app = app.key == "codex" and (getattr(a, "open_in", None) or st.get("chatgpt_in")) == "app"
+    chosen = getattr(a, "open_in", None)
+    in_app = app.key == "codex" and (chosen if chosen in ("app", "terminal") else st.get("chatgpt_in")) == "app"
     if in_app and not apps.desktop_app_found():
         ui.problem("Full Fat could not find the ChatGPT app, so the chat starts here in the Terminal instead.")
         in_app = False
@@ -452,13 +482,33 @@ def cmd_launch(a, ui: UI) -> int:
             return 1
     else:
         ui.ok("JASP is open and connected. Starting the chat...")
-    cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder)
+    browser = app.key == "claude" and claude_place(a, st) == "browser" and in_browser(exe, ui)
+    cmd = apps.launch_command(app, exe, prompts.INTRO_MESSAGE, folder, remote.NAME if browser else None)
     os.chdir(folder)
     if os.name == "nt":
-        return subprocess.run(cmd).returncode
+        with subprocess.Popen(cmd) as p:
+            if browser:
+                remote.start_thread(p)
+            return p.wait()
     real_terminal_input()
+    if browser:
+        remote.start_detached(os.getpid())
     os.execv(exe, cmd)
     return 0  # not reached
+
+
+def in_browser(exe: str, ui: UI) -> bool:
+    """Can this chat also open in the browser? Says what happens either way."""
+    why = remote.unavailable(exe)
+    if why:
+        ui.say("  " + BROWSER_UNAVAILABLE[why])
+        ui.say("  Keep this window open while you chat. To finish, type /exit and press Enter, or close it.")
+        return False
+    ui.ok("Your chat also opens in your web browser once Claude is ready. If it doesn't, go to "
+          f'{remote.CODE_URL} and click "{remote.NAME}". Claude also shows the chat\'s own link below.')
+    for line in BROWSER_NOTES[1:]:
+        ui.say("  " + line)
+    return True
 
 
 def terminal_app(app: apps.App, a, ui: UI) -> str | None:
@@ -705,11 +755,14 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--no-launcher", action="store_true", help="don't make the Full Fat icon")
     s.add_argument("--no-trust", action="store_true", help="don't mark the folder as trusted in Codex")
     s.add_argument("--no-start", action="store_true", help="don't offer to start a chat at the end")
-    s.add_argument("--open-in", choices=["app", "terminal"],
-                   help="where ChatGPT chats open: the ChatGPT app's Codex side or the Terminal (remembered)")
+    s.add_argument("--open-in", choices=["app", "browser", "terminal"],
+                   help="where chats open (remembered): Claude in the Terminal and the browser (browser, the "
+                        "default) or only the Terminal; ChatGPT in the ChatGPT app's Codex side (app) or the "
+                        "Terminal. terminal sets both")
     l = sub.add_parser("launch", parents=[common], help="check JASP, then start the chat (the Full Fat icon runs this)")
     l.add_argument("--app", choices=["claude", "codex"], help="which chat app to start")
-    l.add_argument("--open-in", choices=["app", "terminal"], help="open this ChatGPT chat in the app or here")
+    l.add_argument("--open-in", choices=["app", "browser", "terminal"],
+                   help="where this chat opens: browser or terminal (Claude), app or terminal (ChatGPT)")
     l.add_argument("--install-apps", action="store_true", help=argparse.SUPPRESS)
     l.add_argument("--wait", type=float, help=argparse.SUPPRESS)  # seconds to wait for JASP to answer (CI)
     sub.add_parser("doctor", parents=[common], help="check everything and say how to fix problems")

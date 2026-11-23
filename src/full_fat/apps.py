@@ -264,9 +264,11 @@ def _toml_keys(paths: list[Path]) -> set[str]:
     return keys
 
 
-def launch_command(app: App, exe: str, intro: str, folder: Path | None = None) -> list[str]:
+def launch_command(app: App, exe: str, intro: str, folder: Path | None = None,
+                   remote_name: str | None = None) -> list[str]:
     """The chat app's command. It starts on the top model at high effort, unless a settings file already
-    chooses the model or effort (for example after /model or /effort saved a default): then that one wins."""
+    chooses the model or effort (for example after /model or /effort saved a default): then that one wins.
+    remote_name (Claude Code only): also open the chat on claude.ai/code under that name (Remote Control)."""
     folder = Path(folder) if folder else Path.cwd()
     cmd = [exe]
     if app.key == "claude":
@@ -275,6 +277,8 @@ def launch_command(app: App, exe: str, intro: str, folder: Path | None = None) -
             cmd += ["--model", workspace.CLAUDE_MODEL]
         if "effortLevel" not in have:
             cmd += ["--effort", workspace.CLAUDE_EFFORT]
+        if remote_name:
+            cmd += ["--remote-control", remote_name]
     else:
         have = _toml_keys([codex_home() / "config.toml", folder / ".codex" / "config.toml"])
         if "model" not in have:
@@ -370,7 +374,13 @@ def desktop_app_found(platform: str | None = None) -> bool:
 
 
 def open_desktop_app(url: str, platform: str | None = None, wait: float = 20) -> bool:
-    """Hand the link to the system, which opens the app. False when that fails (no app takes the link)."""
+    """Hand the codex:// link to the system, which opens the app. False when that fails (no app takes it)."""
+    return open_link(url, platform, wait)
+
+
+def open_link(url: str, platform: str | None = None, wait: float = 20) -> bool:
+    """Hand a link to the system, which opens it in the app for it (the browser for https). False when that
+    fails (no app takes the link)."""
     platform = platform or sys.platform
     try:
         if platform.startswith("win"):

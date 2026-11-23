@@ -42,6 +42,11 @@
 - **The "Full Fat" icon is a milk carton.** Before, it showed Terminal's or Command Prompt's icon. Now Linux
   shows the carton on the Desktop and in the applications menu, Windows gets a "Full Fat" shortcut with the
   carton, and on a Mac Full Fat sets it as the Finder icon. Uninstall removes the icon files too.
+- **Claude chats also open in your web browser.** Before, a Claude chat was only in the Terminal window. Now
+  it also opens at claude.ai/code, called "Full Fat", where you can read and type, with tables as tables
+  and approval questions as buttons. The Terminal window keeps it running. If your Claude Code is too old or
+  isn't signed in with a Claude account, the chat stays in the Terminal as before. `--open-in terminal`
+  keeps it there.
 
 ### Fixes
 - **Codex chats in the ChatGPT app start at high effort and without the app's extra tools.** Before, a chat
