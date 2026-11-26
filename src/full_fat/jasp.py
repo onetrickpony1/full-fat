@@ -502,8 +502,28 @@ def parse_tasklist(csv_text: str) -> bool:
     return False
 
 
+PROC = Path("/proc")  # tests point this at a made-up folder
+SESSION_MARK = b"APPCHECK_SESSION="
+
+
+def _session_jasp(pid_dir: Path) -> bool:
+    """Is this JASP a hidden test session's, not the user's?
+
+    A JASP testing tool (app-check) starts its own JASP on an invisible desktop,
+    with its own settings, and every process of such a session has APPCHECK_SESSION in its environment. The
+    user cannot see or close that JASP, so Full Fat must not take it for the user's open JASP.
+    An environment that cannot be read counts as the user's JASP (False), as before this check: Full Fat then
+    at worst waits for a JASP to close, and never opens a second JASP over one the user has open.
+    """
+    try:
+        env = (pid_dir / "environ").read_bytes()
+    except OSError:
+        return False
+    return any(v.startswith(SESSION_MARK) for v in env.split(b"\0"))
+
+
 def running() -> bool:
-    """Is JASP open?"""
+    """Is JASP open? A JASP of a hidden test session (APPCHECK_SESSION, Linux only) does not count."""
     s = system()
     if s == "windows":
         r = run(["tasklist", "/FO", "CSV", "/NH"])
@@ -511,12 +531,11 @@ def running() -> bool:
     if s == "mac":
         r = run(["pgrep", "-x", "JASP"])
         return bool(r and r.returncode == 0)
-    proc = Path("/proc")
     try:
-        for d in proc.iterdir():
+        for d in PROC.iterdir():
             if d.name.isdigit():
                 try:
-                    if (d / "comm").read_text().strip() in ("JASP", "jasp"):
+                    if (d / "comm").read_text().strip() in ("JASP", "jasp") and not _session_jasp(d):
                         return True
                 except OSError:
                     continue

@@ -242,6 +242,11 @@ false.
   `link.py`: JASP's connection setting (on only while Full Fat opens JASP). `apps.py` also finds and opens the
   ChatGPT desktop app.
 - `jasp.py`: detection per OS, the INI editor and the `Store` (INI file or macOS defaults domain), running and ping.
+  `running()` (Linux) skips a JASP whose `/proc/<pid>/environ` has `APPCHECK_SESSION=`: a
+  JASP testing tool (app-check) runs its own JASP on a hidden desktop with that variable, and the user cannot see
+  or close it. An unreadable environ counts as the user's JASP (the old behaviour: at worst Full Fat waits for
+  JASP to close; it never opens a second JASP over the user's). Every caller (`_connect`'s "close JASP" wait and
+  its "JASP closed again" check, `doctor`, `wait_closed`) goes through `running()`.
 - The icon: `assets/icon/` has the SVG sources, their generators and Inter's licence (the "FF" outlines are
   Inter Black, OFL 1.1). `python3 -I assets/icon/build.py` (rsvg-convert, magick) writes `src/full_fat/icons/`
   (PNGs, `.ico`, `.icns`), which ships as package data. Linux: hicolor PNGs, `Icon=` is the absolute path of

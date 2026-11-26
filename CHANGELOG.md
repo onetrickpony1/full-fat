@@ -26,6 +26,9 @@
   main variable boxes, and the model runs as "incomplete". The assistant now fills the main boxes first, starts
   from the analysis's own option descriptions, and checks the options JASP sends back after every run before
   it reports results.
+- **Full Fat no longer waits for a JASP you cannot see.** A JASP that a testing tool starts on a hidden desktop
+  (its processes carry `APPCHECK_SESSION`) was taken for your open JASP, so a chat waited for it to close and
+  `doctor` said JASP was open. Full Fat now leaves such a JASP out (Linux).
 
 ## 0.1.0 - 2026-11-23
 
